@@ -9,12 +9,12 @@ with open("requirements.txt", "r") as f:
 setup(
     name="nhl_scraper",
     version="0.1.0",
-    author="Max Tixador",
-    author_email="maxtixador@gmail.com",
+    author="Your Name",
+    author_email="your.email@example.com",
     description="A Python package for scraping NHL data",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/maxtixador/nhl_scraper",
+    url="https://github.com/yourusername/nhl_scraper",
     packages=find_packages(),
     classifiers=[
         "Programming Language :: Python :: 3",
