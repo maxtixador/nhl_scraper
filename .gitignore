@@ -1,5 +1,5 @@
 # Ignore scrape_nhl_data.py
-scrape_nhl_data.py
+**/scrape_nhl_data.py
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
