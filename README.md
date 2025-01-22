@@ -21,6 +21,13 @@ Since this package is not yet available on PyPI, you can install it directly fro
 pip install git+https://github.com/maxtixador/nhl_scraper.git
 ```
 
+# How to use it
+```bash
+from nhl_scraper.scraper.scrape import *
+
+scrapeDraft()
+```
+
 
 ## Functions
 
