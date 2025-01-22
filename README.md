@@ -14,23 +14,41 @@ A Python package for scraping NHL data including draft information, player stati
 - Player information
 - Game rosters
 
-## Data Format
+## Installation
 
-Each function returns pandas DataFrames with the following key information:
+Since this package is not yet available on PyPI, you can install it directly from GitHub:
+```bash
+pip install git+https://github.com/maxtixador/nhl_scraper.git
+```
 
-- Draft data: round, pick numbers, team information
-- Rankings: player rankings by category
-- Schedule: game dates, times, locations, teams
-- Player data: biographical info, statistics, current team
-- Game data: play-by-play events, player shifts, rosters
+
+## Functions
+
+### Draft Data
+- `scrapeDraft(year=2023, round="all")`: Get draft data for specific year and round
+- `scrapeRankings(year=2025, category=1)`: Get NHL Central Scouting rankings
+
+### Game Data
+- `scrapePlayByPlay(gameId)`: Get detailed play-by-play events
+- `scrapeRosters(gameId)`: Get complete game rosters
+- `scrapeShifts(gameId)`: Get player shift data
+- `scrape_pbp(gameId)`: Get combined play-by-play, roster, and shift data
+
+### Team & Player Data
+- `scrapeTeams()`: Get all NHL team information
+- `scrapeStandings(date)`: Get standings for specific date
+- `scrapePlayer(playerId, key=None)`: Get detailed player information
+- `scrapeSchedule(team_slug, season)`: Get team schedule
+
 
 ## Development
 
-### Requirements
-- Python 3.8+
-- pandas
-- requests
-- numpy
+#### Contributing
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
 
 ## License
 
@@ -40,7 +58,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - NHL API for providing the data
 - Contributors and maintainers
+- NHL Stats community
 
 ## Disclaimer
 
-This package is not affiliated with or endorsed by the National Hockey League (NHL).
+This package is not affiliated with or endorsed by the National Hockey League (NHL). All NHL logos and marks are the property of the NHL and its teams.
