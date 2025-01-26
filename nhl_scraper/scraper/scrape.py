@@ -884,3 +884,28 @@ def scrapePlayer(playerId, key=None):
         response = response
 
     return response
+
+## Records
+
+# Teams
+def scrapeTeams1():
+
+    """
+    Scrapes team data from the NHL website (NHL Records) and returns a DataFrame.
+
+    Returns:
+    - team_df (pd.DataFrame): A DataFrame containing the scraped team data.
+    """
+
+    url = "https://records.nhl.com/site/api/franchise?include=teams.id&include=teams.active&include=teams.triCode&include=teams.placeName&include=teams.commonName&include=teams.fullName&include=teams.logos&include=teams.conference.name&include=teams.division.name&include=teams.franchiseTeam.firstSeason.id&include=teams.franchiseTeam.lastSeason.id"
+
+    response = requests.get(url).json()
+
+    team_df = pd.json_normalize(response['data'])
+
+    # Add meta data (datetime of the execution)
+    team_df["meta_datetime"] = pd.to_datetime("now")
+
+    return team_df
+
+
