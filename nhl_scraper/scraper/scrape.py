@@ -229,9 +229,13 @@ def scrape_pbp(gameId):
 
     shifts_df = scrapeShiftsHTML(gameId)
     shifts_df = shifts_df.merge(rosters_df, on=['is_home', 'sweaterNumber'], how='left')
+    shifts_df.loc[shifts_df['positionCode'].isin(["L", "C", "R", "W"]), 'position'] = 'F'
+    shifts_df.loc[shifts_df['positionCode'].isin(["D"]), 'position'] = 'D'
+    shifts_df.loc[shifts_df['positionCode'].isin(["G"]), 'position'] = 'G'
 
     shifts_df = shifts_df.reset_index(drop=False)
     shifts_df=shifts_df.rename(columns={'index': 'id'})
+
  
 
     shifts_df['side'] = np.where(shifts_df['is_home'] == 1, 'home', 'away')
@@ -565,14 +569,14 @@ def scrape_pbp(gameId):
     shifts_df['is_home'] = np.where(shifts_df['side'] == 'home', 1, 0)
 
 
-    rosters_df.loc[rosters_df['positionCode'].isin(["L", "C", "R", "W"]), 'position'] = 'F'
-    rosters_df.loc[rosters_df['positionCode'].isin(["D"]), 'position'] = 'D'
-    rosters_df.loc[rosters_df['positionCode'].isin(["G"]), 'position'] = 'G'
-    shifts_df = shifts_df.merge(
-        rosters_df[['playerId', 'position']],
-        on='playerId',
-        how='left'
-    )
+    # rosters_df.loc[rosters_df['positionCode'].isin(["L", "C", "R", "W"]), 'position'] = 'F'
+    # rosters_df.loc[rosters_df['positionCode'].isin(["D"]), 'position'] = 'D'
+    # rosters_df.loc[rosters_df['positionCode'].isin(["G"]), 'position'] = 'G'
+    # shifts_df = shifts_df.merge(
+    #     rosters_df[['playerId', 'position']],
+    #     on='playerId',
+    #     how='left'
+    # )
 
     rosters_df['is_home'] = (rosters_df['teamId'] == response.get('homeTeam', {}).get('id', "")).astype(int)
     # Prepare filtered DataFrames
@@ -960,8 +964,8 @@ def scrapeShiftsHTML(gameId):
     big_df = big_df.reset_index(drop=True)
 
 
-    big_df['startTime_s'] = big_df['Start Time (Elapsed) (Seconds)'] + (big_df['Period']-1)*60
-    big_df['endTime_s'] = big_df['End Time (Elapsed) (Seconds)'] + (big_df['Period']-1)*60
+    big_df['startTime_s'] = big_df['Start Time (Elapsed) (Seconds)'] + (big_df['Period']-1)*60*20
+    big_df['endTime_s'] = big_df['End Time (Elapsed) (Seconds)'] + (big_df['Period']-1)*60*20
 
 
 
