@@ -341,7 +341,8 @@ def scrape_pbp(gameId):
         'goal': ('details.scoringPlayerId', 'details.assist1PlayerId', 'details.assist2PlayerId'),
         'giveaway': ('details.playerId', None),
         'takeaway': ('details.playerId', None),
-        'penalty': ('details.committedByPlayerId', 'details.drawnByPlayerId', 'details.servedByPlayerId')
+        'penalty': ('details.committedByPlayerId', 'details.drawnByPlayerId', 'details.servedByPlayerId'),
+        'failed-shot-attempt': ('details.shootingPlayerId', None)
     }
 
     # Initialize player columns
@@ -712,16 +713,17 @@ def scrape_pbp(gameId):
     'delayed-penalty': 3,
     'shot-on-goal': 4,
     'missed-shot': 5,
-    'blocked-shot': 6,
-    'hit': 7,
-    'takeaway': 8,
-    'giveaway': 9,
-    'stoppage': 10,
-    'line-change': 11,
-    'period-start': 12,
-    'period-end': 13,
-    'game-end': 14,
-    'faceoff': 15
+    'failed-shot-attempt': 5,
+    'blocked-shot': 7,
+    'hit': 8,
+    'takeaway': 9,
+    'giveaway': 10,
+    'stoppage': 11,
+    'line-change': 12,
+    'period-start': 13,
+    'period-end': 14,
+    'game-end': 15,
+    'faceoff': 16
     }
 
     pbp_df['priority'] = pbp_df['event'].map(event_priority)
@@ -756,7 +758,6 @@ def scrape_pbp(gameId):
     rosters_df['meta_datetime'] = current_time
 
     return pbp_df, rosters_df, shifts_df
-
 
 ## Rosters
 def scrapeRosters(gameId):
