@@ -2,10 +2,31 @@ import requests
 import pandas as pd
 import numpy as np
 from functools import lru_cache
+from functools import lru_cache
+from lxml import etree
+from bs4 import BeautifulSoup
+import warnings
+warnings.filterwarnings('ignore')
 
 pd.set_option('display.max_columns', None)
 
+def convert_str_to_seconds(time_str):
 
+    number_of_separators = time_str.count(':')
+    
+    if number_of_separators == 0:
+        return int(time_str)
+    elif number_of_separators == 1:
+        minutes, seconds = map(int, time_str.split(':'))
+        total_seconds = minutes * 60 + seconds
+        return total_seconds
+    elif number_of_separators == 2:
+        hours, minutes, seconds = map(int, time_str.split(':'))
+        total_seconds = hours * 3600 + minutes * 60 + seconds
+        return total_seconds
+    
+    else:
+        raise ValueError("Invalid time format")
 
 # Scrape Draft
 def scrapeDraft(year = 2023, round = "all"):
@@ -192,7 +213,7 @@ def scrape_pbp(gameId):
 
     pbp_df = pd.json_normalize(response["plays"])
 
-    rosters_df = pd.json_normalize(response['rosterSpots'])
+    rosters_df = scrapeRosters(gameId)
     rosters_df['fullName'] = rosters_df['firstName.default'] + ' ' + rosters_df['lastName.default']
 
     rosters_dict = dict(zip(rosters_df['playerId'], rosters_df['fullName']))
@@ -201,12 +222,19 @@ def scrape_pbp(gameId):
 
     shifts_response = requests.get(shifts_url).json()
 
-    shifts_df = pd.json_normalize(shifts_response["data"])
-    shifts_df['startTime_s'] = shifts_df['startTime'].str.split(':').apply(lambda x: int(x[0]) * 60 + int(x[1])) + (shifts_df['period'] -1)* 20 * 60
-    shifts_df['endTime_s'] = shifts_df['endTime'].str.split(':').apply(lambda x: int(x[0]) * 60 + int(x[1])) + (shifts_df['period'] -1)* 20 * 60
-    shifts_df['fullName'] = shifts_df['firstName'] + ' ' + shifts_df['lastName']
+    # shifts_df = pd.json_normalize(shifts_response["data"])
+    # shifts_df['startTime_s'] = shifts_df['startTime'].str.split(':').apply(lambda x: int(x[0]) * 60 + int(x[1])) + (shifts_df['period'] -1)* 20 * 60
+    # shifts_df['endTime_s'] = shifts_df['endTime'].str.split(':').apply(lambda x: int(x[0]) * 60 + int(x[1])) + (shifts_df['period'] -1)* 20 * 60
+    # shifts_df['fullName'] = shifts_df['firstName'] + ' ' + shifts_df['lastName']
 
-    shifts_df['side'] = np.where(shifts_df['teamAbbrev'] == response['homeTeam']['abbrev'], 'home', 'away')
+    shifts_df = scrapeShiftsHTML(gameId)
+    shifts_df = shifts_df.merge(rosters_df, on=['is_home', 'sweaterNumber'], how='left')
+
+    shifts_df = shifts_df.reset_index(drop=False)
+    shifts_df=shifts_df.rename(columns={'index': 'id'})
+ 
+
+    shifts_df['side'] = np.where(shifts_df['is_home'] == 1, 'home', 'away')
 
 
     # Compare columns
@@ -794,6 +822,153 @@ def scrapeShifts(gameId):
 
     return shifts_df
 
+def scrapeShiftsHTML(gameId):
+
+    """
+    Scrapes shift data from the NHL TOI Reports for a given game ID.
+
+    Parameters :
+      - game_id (int) : The ID of the game you want to scrape the shift data for.
+
+    Returns :
+      - big_df (pd.DataFrame) : A DataFrame containing the scraped shift data.
+
+    """
+
+
+    year1 = str(gameId)[:4]
+    year2 = int(year1) + 1
+
+    shortId = str(gameId)[4:]
+
+    # if url has TH, it's home, if TV away
+
+
+    url_template = f"https://www.nhl.com/scores/htmlreports/{year1}{year2}/T{{HV}}{shortId}.HTM"
+
+    dfs_list = []
+
+    for side in ['H', 'V']:
+        url = url_template.format(HV=side)
+
+
+
+        # Fetch the webpage content
+        response = requests.get(url)
+        response.raise_for_status()
+
+        # Use BeautifulSoup with lxml parser
+        soup = BeautifulSoup(response.content, 'lxml')
+
+        # Convert BeautifulSoup object to lxml etree
+        tree = etree.HTML(str(soup))
+
+        # Example: Extract player names using XPath
+        player_names = tree.xpath('.//td[@class="playerHeading + border"]/text()')
+
+        # Example: Extract shift details using XPath
+        shift_rows = tree.xpath('.//tr[@class="evenColor"] | .//tr[@class="oddColor"]')
+
+        # Store extracted data
+        shift_data = []
+        for row in shift_rows:
+            shift_number = row.xpath('./td[1]/text()')[0].strip() if row.xpath('./td[1]/text()') else ''
+            period = row.xpath('./td[2]/text()')[0].strip() if row.xpath('./td[2]/text()') else ''
+            start_time = row.xpath('./td[3]/text()')[0].strip() if row.xpath('./td[3]/text()') else ''
+            end_time = row.xpath('./td[4]/text()')[0].strip() if row.xpath('./td[4]/text()') else ''
+            duration = row.xpath('./td[5]/text()')[0].strip() if row.xpath('./td[5]/text()') else ''
+            event = row.xpath('./td[6]/text()')[0].strip() if row.xpath('./td[6]/text()') else ''
+
+            shift_data.append({
+                'Shift Number': shift_number,
+                'Period': period,
+                'Start Time': start_time,
+                'End Time': end_time,
+                'Duration': duration,
+                'Event': event
+            })
+
+        # Output extracted data
+        shifts_df = pd.DataFrame(shift_data)
+
+        shifts_df['is_home'] = 1 if side == 'H' else 0
+
+        # Replace 'OT' with 4 ### TO FIX EVENTUALLY BECAUSE OF PLAYOFFS
+        shifts_df['Period'] = shifts_df['Period'].replace('OT', 4)
+        shifts_df['Period'] = pd.to_numeric(shifts_df['Period'], errors='coerce')
+
+        shifts_df['Shift Number'] = pd.to_numeric(shifts_df['Shift Number'], errors='coerce')
+
+        #Assign a row with 1 where 	Start Time has a / in it and filter out 0s
+        shifts_df['dummy'] = np.where(shifts_df['Start Time'].str.contains('/'), 1, 0)
+        shifts_df = shifts_df[shifts_df['dummy'] == 1]
+
+        shifts_df = shifts_df.drop(columns=['dummy'])
+
+
+
+
+        # Assign player names
+        shifts_df["Player Name"] = None
+        player_index = 0
+
+        shifts_df['Shift Number'] = pd.to_numeric(shifts_df['Shift Number'], errors='coerce')
+        shifts_df = shifts_df.reset_index(drop=True)
+        # Iterate through shifts and assign player names
+        for i in range(len(shifts_df)):
+            if player_index < len(player_names):
+                shifts_df.loc[i, "Player Name"] = player_names[player_index]
+
+            # If shift number decreases, move to the next player
+            if i > 0 and shifts_df.loc[i, "Shift Number"] < shifts_df.loc[i - 1, "Shift Number"]:
+                player_index += 1  # Move to th
+
+
+
+        # Split the "Player Name" column into "Player Number" and "Player Name"
+        shifts_df[['Player Number', 'Player Name']] = shifts_df['Player Name'].str.split(' ', n=1, expand=True)
+
+        # Convert "Player Number" to numeric for sorting or analysis
+        shifts_df['Player Number'] = pd.to_numeric(shifts_df['Player Number'], errors='coerce')
+        shifts_df['firstName'] = shifts_df['Player Name'].str.split(', ').str[1]
+
+        shifts_df['lastName'] = shifts_df['Player Name'].str.split(', ').str[0]
+        # Remove number from firstName
+        shifts_df['lastName'] = shifts_df['lastName'].str.replace(r'\d+', '')
+        shifts_df['lastName'] = shifts_df['lastName'].str.strip()
+        
+        
+
+        shifts_df[['Start Time (Elapsed)', 'Start Time (Remaining)']] = shifts_df['Start Time'].str.split(' ', n=1, expand=True)
+        shifts_df[['End Time (Elapsed)', 'End Time (Remaining)']] = shifts_df['End Time'].str.split(' ', n=1, expand=True)
+
+        # Strip "/ " in remaining cols
+        shifts_df['Start Time (Remaining)'] = shifts_df['Start Time (Remaining)'].str.replace('/ ', '')
+        shifts_df['End Time (Remaining)'] = shifts_df['End Time (Remaining)'].str.replace('/ ', '')
+
+
+        shifts_df = shifts_df.drop(columns=['Start Time', 'End Time'])
+
+        for col in ['Start Time (Elapsed)', 'Start Time (Remaining)', 'End Time (Elapsed)', 'End Time (Remaining)', 'Duration']:
+            col_with_seconds = col + ' (Seconds)'
+            shifts_df[col_with_seconds] = shifts_df[col].apply(convert_str_to_seconds)
+
+        dfs_list.append(shifts_df)
+    
+    big_df = pd.concat(dfs_list)
+    big_df = big_df.reset_index(drop=True)
+
+
+    big_df['startTime_s'] = big_df['Start Time (Elapsed) (Seconds)'] + (big_df['Period']-1)*60
+    big_df['endTime_s'] = big_df['End Time (Elapsed) (Seconds)'] + (big_df['Period']-1)*60
+
+
+
+    big_df['sweaterNumber'] = big_df['Player Number']
+    big_df['gameId'] = gameId
+    
+
+    return big_df
 
 # Standings
 def scrapeStandings(date):
