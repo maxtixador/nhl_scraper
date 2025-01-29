@@ -285,7 +285,7 @@ def scrape_pbp(gameId):
 
     # Test to see if events we are not aware of
     expected_events = ['period-start', 'faceoff', 'hit', 'blocked-shot', 'shot-on-goal',
-       'stoppage', 'giveaway', 'delayed-penalty', 'penalty',
+       'stoppage', 'giveaway', 'delayed-penalty', 'penalty', 'failed-shot-attempt',
        'missed-shot', 'goal', 'takeaway', 'period-end',
        'shootout-complete', 'game-end', ]
 
