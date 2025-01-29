@@ -786,7 +786,7 @@ def scrapeRosters(gameId):
         response['homeTeam']['id'] : response['homeTeam']['abbrev']
     }
     rosters_df['teamAbbrev'] = rosters_df['teamId'].map(abbrev_dict)
-
+    rosters_df['is_home'] = (rosters_df['teamId'] == response['homeTeam']['id']).astype(int)
 
     rosters_df["gameId"] = gameId
 
