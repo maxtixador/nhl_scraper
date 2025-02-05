@@ -126,6 +126,31 @@ def scrapeTeams():
 
     return teams_df
 
+# Active Teams
+def scrapeActiveTeams():
+    """
+    Scrapes active team data from the NHL website.
+
+    Returns:
+    - df (pd.DataFrame) : A DataFrame containing the active data, including teamId, abbreviation, name, city and logo
+
+    * Contains the teamId but not franchiseId
+    """
+    
+    url = 'https://api-web.nhle.com/v1/schedule-calendar/now'
+
+    response = requests.get(url).json()
+
+    df = pd.json_normalize(response['teams'])
+    df = df[['id', 'abbrev', 'name.default', 'commonName.default', 'placeNameWithPreposition.default', 'logo', 'darkLogo']]
+    df = df.rename(columns={"id": "teamId"})
+
+    #Drop the .default from the column names
+    df.columns = [col.replace('.default', '') for col in df.columns] 
+
+    df["meta_datetime"] = pd.to_datetime("now")
+    return df
+
 def scrapeTeam(team, season):
     """
     Scrapes team data from the NHL website for a given team and season.
@@ -1158,4 +1183,22 @@ def scrapeTeams1():
 
     return team_df
 
+# AHL and ECHL affiliates of active teams
+def scrapeAffiliates():
+
+    """
+    Scrapes active team affiliate data from NHL Records and returns a DataFrame.
+
+    Returns:
+    - df (pd.DataFrame): A DataFrame containing the scraped affiliate data.
+    """
+    url = 'https://records.nhl.com/site/api/team-affiliate?cayenneExp=active=true&include=franchiseId&include=teamId&include=teamAffiliateId&include=teamAffiliate.fullName&include=teamAffiliate.officialSiteUrl&include=teamAffiliate.league.abbreviation'
+    
+    response = requests.get(url).json()
+    
+    df = pd.json_normalize(response['data'])
+    
+    df["meta_datetime"] = pd.to_datetime("now")
+
+    return df
 
