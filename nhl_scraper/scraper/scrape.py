@@ -126,6 +126,45 @@ def scrapeTeams():
 
     return teams_df
 
+def scrapeTeam(team, season):
+    """
+    Scrapes team data from the NHL website for a given team and season.
+
+    Parameters :
+      - team (str) : The team you want to scrape the data for.
+      - season (str/int) : The season you want to scrape the data for in the format of "YYYYYYYY".
+
+    Returns :
+      - team_df (pd.DataFrame) : A DataFrame containing the scraped team data.
+
+    """
+    url = f"https://api-web.nhle.com/v1/roster/{team}/{season}"
+    
+
+    response = requests.get(url).json()
+    
+    df = pd.concat(
+        [
+            pd.json_normalize(response[key])
+            for key in response.keys()
+                
+        ]
+    )
+        
+    df = df.reset_index(drop=True)
+    df['fullName'] = df['firstName.default'] + ' ' + df['lastName.default']
+    df["team"] = team
+    df["season"] = season
+
+    df = df.rename(columns={'id': 'playerId'})
+
+    df['position'] = np.where(~df['positionCode'].isin(['G', 'D']), 'F', df['positionCode'])
+
+    df['positionD'] = np.where(df['position'] == 'D',  df['shootsCatches'] + df['position'], df['position'])
+    # Add meta data (datetime of the execution)
+    df["meta_datetime"] = pd.to_datetime("now")
+
+    return df
 
 # Schedule
 def scrapeSchedule(team_slug, season):
