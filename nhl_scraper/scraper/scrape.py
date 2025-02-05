@@ -866,6 +866,7 @@ def scrapeShifts(gameId):
 
     return shifts_df
 
+## Shifts HTML
 def scrapeShiftsHTML(gameId):
 
     """
@@ -1103,6 +1104,36 @@ def scrapePlayer(playerId, key=None):
         response = response
 
     return response
+
+# Gamelog
+def scrapeGamelog(playerId, season, include_info=True):
+
+    """
+    Scrapes gamelog data from the NHL website for a given player ID and season.
+
+    Parameters :
+      - playerId (int) : The ID of the player you want to scrape the gamelog data for.
+      - season (str/int) : The season you want to scrape the gamelog data for in the format of "YYYYYYYY".
+      - include_info (bool) : Whether to include player information in the gamelog data.
+
+
+    Returns :
+      - df (pd.DataFrame) : A DataFrame containing the scraped gamelog data.
+    """
+
+    url = f"https://api-web.nhle.com/v1/player/{playerId}/game-log/{season}/2"
+    response = requests.get(url).json()
+    df = pd.json_normalize(response['gameLog'])
+    df['playerId'] = playerId
+    df['season'] = season
+    df['meta_datetime'] = pd.to_datetime("now")
+    if include_info:
+        info = scrapePlayer(playerId)
+        df['firstName'] = info['firstName']['default']
+        df['lastName'] = info['lastName']['default']
+        df['fullName'] = info['firstName']['default'] + " " + info['lastName']['default']
+        df['position'] = info['position']
+    return df
 
 ## Records
 
