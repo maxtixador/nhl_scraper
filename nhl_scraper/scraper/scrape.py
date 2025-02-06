@@ -126,7 +126,6 @@ def scrapeTeams():
 
     return teams_df
 
-# Roster
 def scrapeTeam(team, season):
     """
     Scrapes team data from the NHL website for a given team and season.
@@ -1257,4 +1256,22 @@ def scrapeTeams1():
 
     return team_df
 
+# AHL and ECHL affiliates of active teams
+def scrapeAffiliates():
+
+    """
+    Scrapes active team affiliate data from NHL Records and returns a DataFrame.
+
+    Returns:
+    - df (pd.DataFrame): A DataFrame containing the scraped affiliate data.
+    """
+    url = 'https://records.nhl.com/site/api/team-affiliate?cayenneExp=active=true&include=franchiseId&include=teamId&include=teamAffiliateId&include=teamAffiliate.fullName&include=teamAffiliate.officialSiteUrl&include=teamAffiliate.league.abbreviation'
+    
+    response = requests.get(url).json()
+    
+    df = pd.json_normalize(response['data'])
+    
+    df["meta_datetime"] = pd.to_datetime("now")
+
+    return df
 
