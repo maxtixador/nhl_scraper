@@ -126,6 +126,7 @@ def scrapeTeams():
 
     return teams_df
 
+# Roster
 def scrapeTeam(team, season):
     """
     Scrapes team data from the NHL website for a given team and season.
@@ -164,6 +165,104 @@ def scrapeTeam(team, season):
     # Add meta data (datetime of the execution)
     df["meta_datetime"] = pd.to_datetime("now")
 
+    return df
+
+# Team Stats
+def scrapeTeamStats(team, season, session = 2 ,goalies=False ):
+    """
+    Scrapes team stats data from the NHL website for a given team and season.
+
+    Parameters :
+      - team (str) : The team you want to scrape the stats data for.
+      - season (str/int) : The season you want to scrape the stats data for in the format of "YYYYYYYY".
+      - session (int) : The session you want to scrape the stats data for. Default is 2.
+        1 = preseason
+        2 = regular season
+        3 = playoffs
+      - goalies (bool) : Whether to scrape goalie stats or not. Default is False.
+
+    Returns :
+      - df (pd.DataFrame) : A DataFrame containing the scraped team stats data.
+
+    """
+    session_dict = {
+    'preseason': 1,
+    'regular': 2,
+    'playoffs': 3
+    }
+
+    if session in session_dict:
+        session_key = session
+        session_value = session_dict[session]
+    elif session in session_dict.values():
+        session_value = session
+        session_key = [key for key, value in session_dict.items() if value == session][0]
+
+        # Session value : 1, 2 , 3
+        # Session key : preseason, regular, playoffs
+    else:
+        raise ValueError("Session must be either 'preseason' (1), 'regular' (2), or 'playoffs' (3).")
+
+
+    url = f"https://api-web.nhle.com/v1/club-stats/{team}/{season}/{session_value}"
+
+    response = requests.get(url).json()
+
+    if goalies:
+        df = pd.json_normalize(response["goalies"])
+    else:
+        df = pd.json_normalize(response["skaters"])
+
+    df = df.reset_index(drop=True)
+    df['fullName'] = df['firstName.default'] + ' ' + df['lastName.default']
+    df["team"] = team
+    df["season"] = season
+    df["session"] = session_key
+    df["sessionCode"] = session_value
+
+    df = df.rename(columns={'id': 'playerId'})
+
+    df['position'] = np.where(~df['positionCode'].isin(['G', 'D']), 'F', df['positionCode'])
+
+    # Add meta data (datetime of the execution)
+    df["meta_datetime"] = pd.to_datetime("now")  
+
+    return df
+
+# Prospects
+def scrapeProspects(team):
+    """
+    Scrapes prospect data from the NHL website for a given team.
+
+    Parameters :
+      - team (str) : The team you want to scrape the prospect data for.
+
+    Returns :
+      - df (pd.DataFrame) : A DataFrame containing the scraped prospect data.
+
+    """
+
+    url =  f'https://api-web.nhle.com/v1/prospects/MTL'
+    response = requests.get(url).json()
+
+    df = pd.concat(
+        [
+            pd.json_normalize(response[key])
+            for key in response.keys()
+                
+        ]
+    )
+    df = df.reset_index(drop=True)
+    df['fullName'] = df['firstName.default'] + ' ' + df['lastName.default']
+    df["team"] = team
+
+    df = df.rename(columns={'id': 'playerId'})
+
+    df['position'] = np.where(~df['positionCode'].isin(['G', 'D']), 'F', df['positionCode'])
+    df['positionD'] = np.where(df['position'] == 'D',  df['shootsCatches'] + df['position'], df['position'])
+
+    # Add meta data (datetime of the execution)
+    df["meta_datetime"] = pd.to_datetime("now")
     return df
 
 # Schedule
