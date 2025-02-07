@@ -1275,3 +1275,25 @@ def scrapeAffiliates():
 
     return df
 
+# Active Teams
+def scrapeActiveTeams():
+    """
+    Scrapes active team data from the NHL website.
+    Returns:
+    - df (pd.DataFrame) : A DataFrame containing the active data, including teamId, abbreviation, name, city and logo
+    * Contains the teamId but not franchiseId
+    """
+
+    url = 'https://api-web.nhle.com/v1/schedule-calendar/now'
+
+    response = requests.get(url).json()
+
+    df = pd.json_normalize(response['teams'])
+    df = df[['id', 'abbrev', 'name.default', 'commonName.default', 'placeNameWithPreposition.default', 'logo', 'darkLogo']]
+    df = df.rename(columns={"id": "teamId"})
+
+    #Drop the .default from the column names
+    df.columns = [col.replace('.default', '') for col in df.columns]
+
+    df["meta_datetime"] = pd.to_datetime("now")
+    return df
