@@ -325,7 +325,7 @@ def scrapePlayByPlay(gameId):
     return pbp_df
 
 
-## Play-by-Play with Roster and Shifts
+## Play-by-Play with Roster and Shifts ### TO FIX, THIS IS JUST A TEMPORARY SOLUTION
 @lru_cache(maxsize=1000)  # Cache up to 1000 unique gameIds
 def scrape_pbp(gameId):
     """
@@ -355,9 +355,9 @@ def scrape_pbp(gameId):
 
     rosters_dict = dict(zip(rosters_df['playerId'], rosters_df['fullName']))
 
-    shifts_url = f"https://api.nhle.com/stats/rest/en/shiftcharts?cayenneExp=gameId={gameId}"
+    # shifts_url = f"https://api.nhle.com/stats/rest/en/shiftcharts?cayenneExp=gameId={gameId}"
 
-    shifts_response = requests.get(shifts_url).json()
+    # shifts_response = requests.get(shifts_url).json()
 
     # shifts_df = pd.json_normalize(shifts_response["data"])
     # shifts_df['startTime_s'] = shifts_df['startTime'].str.split(':').apply(lambda x: int(x[0]) * 60 + int(x[1])) + (shifts_df['period'] -1)* 20 * 60
@@ -365,17 +365,19 @@ def scrape_pbp(gameId):
     # shifts_df['fullName'] = shifts_df['firstName'] + ' ' + shifts_df['lastName']
 
     shifts_df = scrapeShiftsHTML(gameId)
-    shifts_df = shifts_df.merge(rosters_df, on=['is_home', 'sweaterNumber'], how='left')
-    shifts_df.loc[shifts_df['positionCode'].isin(["L", "C", "R", "W"]), 'position'] = 'F'
-    shifts_df.loc[shifts_df['positionCode'].isin(["D"]), 'position'] = 'D'
-    shifts_df.loc[shifts_df['positionCode'].isin(["G"]), 'position'] = 'G'
+    shifts_df1 = (shifts_df
+    .merge(rosters_df[['teamId', 'playerId', 'sweaterNumber', 'positionCode', 'headshot',
+          'firstName.default', 'lastName.default', 
+          'teamAbbrev', 'is_home', 'gameId',]], on=['sweaterNumber', 'is_home', 'gameId'])
+    .assign(fullName = lambda x : x['firstName.default'] + ' ' + x['lastName.default'])
+    )
+    # shifts_df = shifts_df.merge(rosters_df, on=['is_home', 'sweaterNumber'], how='left')
 
-    shifts_df = shifts_df.reset_index(drop=False)
-    shifts_df=shifts_df.rename(columns={'index': 'id'})
+    # shifts_df = shifts_df.reset_index(drop=False)
+    # shifts_df=shifts_df.rename(columns={'index': 'id'})
 
- 
 
-    shifts_df['side'] = np.where(shifts_df['is_home'] == 1, 'home', 'away')
+    # shifts_df['side'] = np.where(shifts_df['is_home'] == 1, 'home', 'away')
 
 
     # Compare columns
@@ -580,18 +582,18 @@ def scrape_pbp(gameId):
         pbp_df['yCoord']
     )
 
-    stoppages_times = pbp_df.query("event == 'faceoff'")['elapsedTime'].to_list()
+    # stoppages_times = pbp_df.query("event == 'faceoff'")['elapsedTime'].to_list()
 
-    shifts_df['type_on'] = np.where(
-        shifts_df['startTime_s'].isin(stoppages_times),
-        'SIP', # Stoppage-in-Play
-        'OTF' # On-the-Fly
-    )
-    shifts_df['type_off'] = np.where(
-        shifts_df['endTime_s'].isin(stoppages_times),
-        'SIP', # Stoppage-in-Play
-        'OTF' # On-the-Fly
-    )
+    # shifts_df['type_on'] = np.where(
+    #     shifts_df['startTime_s'].isin(stoppages_times),
+    #     'SIP', # Stoppage-in-Play
+    #     'OTF' # On-the-Fly
+    # )
+    # shifts_df['type_off'] = np.where(
+    #     shifts_df['endTime_s'].isin(stoppages_times),
+    #     'SIP', # Stoppage-in-Play
+    #     'OTF' # On-the-Fly
+    # )
 
     # faceoff_dots = {
     #     "center_ice": {
@@ -683,37 +685,37 @@ def scrape_pbp(gameId):
 
 
     # Where was the faceoff taken (if player has a SIP Start)
-    shifts_df = shifts_df.merge(
-        pbp_df.query("event == 'faceoff'")[['elapsedTime', 'home_team_side', 'away_team_side',
-                                            'home_team_side_detail', 'away_team_side_detail']],
-        left_on='startTime_s',
-        right_on='elapsedTime',
-        how='left'
-    )
-
-    shifts_df["zoneStartSide"] = np.where(
-        shifts_df["side"] == "home",
-        shifts_df["home_team_side"],
-        shifts_df["away_team_side"])
-
-    shifts_df["zoneStartSideDetail"] = np.where(
-        shifts_df["side"] == "home",
-        shifts_df["home_team_side_detail"],
-        shifts_df["away_team_side_detail"])
-
-    shifts_df = shifts_df.drop(columns=['elapsedTime', 'home_team_side', 'away_team_side',
-                                        'home_team_side_detail', 'away_team_side_detail'])
-    shifts_df['is_home'] = np.where(shifts_df['side'] == 'home', 1, 0)
-
-
-    # rosters_df.loc[rosters_df['positionCode'].isin(["L", "C", "R", "W"]), 'position'] = 'F'
-    # rosters_df.loc[rosters_df['positionCode'].isin(["D"]), 'position'] = 'D'
-    # rosters_df.loc[rosters_df['positionCode'].isin(["G"]), 'position'] = 'G'
     # shifts_df = shifts_df.merge(
-    #     rosters_df[['playerId', 'position']],
-    #     on='playerId',
+    #     pbp_df.query("event == 'faceoff'")[['elapsedTime', 'home_team_side', 'away_team_side',
+    #                                         'home_team_side_detail', 'away_team_side_detail']],
+    #     left_on='startTime_s',
+    #     right_on='elapsedTime',
     #     how='left'
     # )
+
+    # shifts_df["zoneStartSide"] = np.where(
+    #     shifts_df["side"] == "home",
+    #     shifts_df["home_team_side"],
+    #     shifts_df["away_team_side"])
+
+    # shifts_df["zoneStartSideDetail"] = np.where(
+    #     shifts_df["side"] == "home",
+    #     shifts_df["home_team_side_detail"],
+    #     shifts_df["away_team_side_detail"])
+
+    # shifts_df = shifts_df.drop(columns=['elapsedTime', 'home_team_side', 'away_team_side',
+    #                                     'home_team_side_detail', 'away_team_side_detail'])
+    # shifts_df['is_home'] = np.where(shifts_df['side'] == 'home', 1, 0)
+
+
+    rosters_df.loc[rosters_df['positionCode'].isin(["L", "C", "R", "W"]), 'position'] = 'F'
+    rosters_df.loc[rosters_df['positionCode'].isin(["D"]), 'position'] = 'D'
+    rosters_df.loc[rosters_df['positionCode'].isin(["G"]), 'position'] = 'G'
+    shifts_df = shifts_df1.merge(
+        rosters_df[['playerId', 'position']],
+        on='playerId',
+        how='left'
+    )
 
     rosters_df['is_home'] = (rosters_df['teamId'] == response.get('homeTeam', {}).get('id', "")).astype(int)
     # Prepare filtered DataFrames
@@ -805,23 +807,35 @@ def scrape_pbp(gameId):
 
 
     # Add shifts to pbp
+    # reshaped_df = pd.melt(
+    # shifts_df,
+    # id_vars=['id', 'playerId','teamAbbrev','teamId', 'fullName', 'zoneStartSide', 'zoneStartSideDetail', 'is_home', 'type_on', 'type_off'],
+    # value_vars=['startTime_s', 'endTime_s'],
+    # var_name='event_type',
+    # value_name='event_time_s'
+    # )
+    
+
     reshaped_df = pd.melt(
-    shifts_df,
-    id_vars=['id', 'playerId','teamAbbrev','teamId', 'fullName', 'zoneStartSide', 'zoneStartSideDetail', 'is_home', 'type_on', 'type_off'],
-    value_vars=['startTime_s', 'endTime_s'],
-    var_name='event_type',
-    value_name='event_time_s'
-    )
+        shifts_df1,
+        id_vars=['playerId','teamAbbrev','teamId', 'fullName',  'is_home'],
+        value_vars=['startTime_s', 'endTime_s'],
+        var_name='event_type',
+        value_name='event_time_s'
+        )
+
 
     reshaped_df['typeCode'] = reshaped_df['event_type'].map({'startTime_s': 'ON', 'endTime_s': 'OFF'})
 
 
-    reshaped_df['type'] = reshaped_df.apply(
-        lambda row: row['type_on'] if row['typeCode'] == 'ON' else row['type_off'], axis=1
-    )
+    # reshaped_df['type'] = reshaped_df.apply(
+    #     lambda row: row['type_on'] if row['typeCode'] == 'ON' else row['type_off'], axis=1
+    # )
 
 
-    reshaped_df = reshaped_df.drop(columns=['event_type', 'type_on', 'type_off'])
+    reshaped_df = reshaped_df.drop(columns=['event_type',
+                                            # 'type_on', 'type_off'
+                                            ])
 
 
     reshaped_df = reshaped_df.sort_values(['playerId', 'event_time_s', 'typeCode']).reset_index(drop=True)
@@ -829,12 +843,12 @@ def scrape_pbp(gameId):
     reshaped_df = reshaped_df.rename(columns={'event_time_s': 'time_s',
                                           'playerId':'playerId_1',
                                           'fullName':'playerName_1',
-                                          'zoneStartSide':'zoneStartSide_1',
-                                          'zoneStartSideDetail':'zoneStartSideDetail_1',
+                                          # 'zoneStartSide':'zoneStartSide_1',
+                                          # 'zoneStartSideDetail':'zoneStartSideDetail_1',
                                           'event_time_s' : 'elapsedTime',
                                           'teamAbbrev' : 'eventTeam',
                                           'type' : 'descKey',
-                                          'id' : 'eventId'
+                                          # 'id' : 'eventId'
 
                                           })
 
@@ -1101,7 +1115,7 @@ def scrapeShiftsHTML(gameId):
     big_df = pd.concat(dfs_list)
     big_df = big_df.reset_index(drop=True)
 
-
+    # Add time to the shifts relative to the start of the game (vs the start of the period like the other columns)
     big_df['startTime_s'] = big_df['Start Time (Elapsed) (Seconds)'] + (big_df['Period']-1)*60*20
     big_df['endTime_s'] = big_df['End Time (Elapsed) (Seconds)'] + (big_df['Period']-1)*60*20
 
