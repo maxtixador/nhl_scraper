@@ -23,6 +23,7 @@ This document outlines the planned development roadmap for NHL Scraper.
 - Additional data visualization capabilities
 - Expanded historical data access
 
+
 ## Development Status
 
 | Feature | Status | Target Date |
@@ -34,7 +35,7 @@ This document outlines the planned development roadmap for NHL Scraper.
 | AHL Scraper | 📅 Planned | Q4 2025 |
 | Data Analysis Tools | 🚧 In Progress | Ongoing |
 | Caching System | ✅ Complete | - |
-| PyPI Package Release | 📅 Planned | Q2 2024 |
+| PyPI Package Release | 📅 Planned | Q2 2025 |
 
 Status Key:
 - ✅ Complete
