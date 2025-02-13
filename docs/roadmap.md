@@ -1,4 +1,4 @@
-# Roadmap
+# 🗺️ Roadmap
 
 This document outlines the planned development roadmap for NHL Scraper.
 

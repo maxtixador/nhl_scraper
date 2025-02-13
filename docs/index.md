@@ -1,4 +1,4 @@
-# NHL Scraper Documentation
+# 🏠 NHL Scraper Documentation
 
 Welcome to NHL Scraper, a Python package designed to make NHL data collection easy and efficient. This package provides tools to scrape and parse NHL statistics, game data, player information, and more from official NHL sources.
 

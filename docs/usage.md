@@ -1,4 +1,4 @@
-# Usage Guide
+# 📚 Usage Guide
 
 This guide covers the NHL statistics API functionality. Please refer to the following sections:
 
