@@ -1,3 +1,5 @@
+"""Test module for NHL scraper main functionality."""
+
 from nhl_scraper.scraper.scrape import scrape_pbp
 
 # Test with a real game ID (e.g., first game of 2023-24 season)
@@ -16,3 +18,18 @@ print("\nShifts Data:")
 print(f"Number of shifts: {len(shifts_df)}")
 print(f"Columns: {shifts_df.columns.tolist()}")
 print(pbp_df.head())
+
+
+def test_scrape_draft():
+    """Test draft data scraping functionality."""
+    # ... existing code ...
+
+
+def test_scrape_rankings():
+    """Test draft rankings scraping functionality."""
+    # ... existing code ...
+
+
+def test_scrape_teams():
+    """Test team data scraping functionality."""
+    # ... existing code ...

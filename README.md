@@ -47,7 +47,7 @@ scrapeDraft()
 - `scrapePlayer(playerId, key=None)`: Get detailed player information
 - `scrapeSchedule(team_slug, season)`: Get team schedule
 
-### 
+###
 
 
 ## Development

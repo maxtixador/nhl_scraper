@@ -1,0 +1,77 @@
+@import url('https://fonts.googleapis.com/css2?family=Titillium+Web:wght@300;400;600;700&display=swap');
+
+[data-md-color-scheme="default"] {
+    --md-primary-fg-color: #808080;
+    --md-primary-fg-color--light: #A0A0A0;
+    --md-primary-fg-color--dark: #606060;
+    --md-accent-fg-color: #B8B8B8;
+    --md-text-font: "Titillium Web";
+}
+
+[data-md-color-scheme="slate"] {
+    --md-primary-fg-color: #808080;
+    --md-primary-fg-color--light: #A0A0A0;
+    --md-primary-fg-color--dark: #606060;
+    --md-accent-fg-color: #B8B8B8;
+    --md-text-font: "Titillium Web";
+}
+
+body {
+    font-family: "Titillium Web", sans-serif;
+}
+
+.md-header {
+    box-shadow: 0 0 0.2rem rgba(0,0,0,.1), 0 0.2rem 0.4rem rgba(0,0,0,.2);
+}
+
+.md-main {
+    background: linear-gradient(to bottom right, var(--md-primary-fg-color--light) 0%, var(--md-primary-fg-color--dark) 100%);
+}
+
+.md-content {
+    background-color: var(--md-default-bg-color);
+    border-radius: 0.5rem;
+    box-shadow: 0 0 0.2rem rgba(0,0,0,.1), 0 0.2rem 0.4rem rgba(0,0,0,.2);
+    margin: 1rem;
+    padding: 1rem;
+}
+
+.md-typeset h1 {
+    color: var(--md-primary-fg-color);
+    font-weight: 700;
+    margin-bottom: 2rem;
+    font-family: "Titillium Web", sans-serif;
+}
+
+.md-typeset h2 {
+    color: var(--md-primary-fg-color--light);
+    font-weight: 600;
+    font-family: "Titillium Web", sans-serif;
+}
+
+.md-typeset {
+    font-family: "Titillium Web", sans-serif;
+}
+
+.md-typeset code {
+    background-color: var(--md-code-bg-color);
+    border-radius: 0.2rem;
+    padding: 0.2rem 0.4rem;
+}
+
+.md-typeset pre > code {
+    padding: 1rem;
+}
+
+.md-typeset .admonition {
+    border-radius: 0.5rem;
+    box-shadow: 0 0.2rem 0.4rem rgba(0,0,0,.1);
+}
+
+.md-nav__link:hover {
+    color: var(--md-accent-fg-color);
+}
+
+.md-nav {
+    font-family: "Titillium Web", sans-serif;
+}

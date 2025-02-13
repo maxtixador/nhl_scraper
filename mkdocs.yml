@@ -1,0 +1,117 @@
+site_name: 🏒 NHL Scraper
+site_description: A Python package for scraping NHL data
+repo_url: https://github.com/yourusername/nhl-scraper
+repo_name: 🏒 nhl-scraper
+site_author: Your Name
+copyright: Copyright &copy; 2024 NHL Scraper
+
+theme:
+  name: material
+  icon:
+    repo: fontawesome/brands/github
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.sections
+    - navigation.expand
+    - navigation.indexes
+    - navigation.top
+    - toc.follow
+    - search.suggest
+    - search.highlight
+    - content.tabs.link
+    - content.code.annotation
+    - content.code.copy
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: grey
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: grey
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  font:
+    text: Titillium Web
+    code: Roboto Mono
+
+plugins:
+  - search
+  - gen-files:
+      scripts:
+        - docs/gen_ref_pages.py
+  - literate-nav:
+      nav_file: SUMMARY.md
+  - section-index
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          paths: [nhl_scraper]
+          options:
+            show_source: true
+            show_root_heading: true
+            heading_level: 1
+            docstring_style: google
+            show_signature_annotations: true
+
+markdown_extensions:
+  - attr_list
+  - md_in_html
+  - pymdownx.emoji:
+      emoji_index: !!python/object/apply:materialx.emoji.twemoji {}
+      emoji_generator: !!python/object/apply:materialx.emoji.to_svg {}
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - admonition
+  - pymdownx.details
+  - pymdownx.tabbed:
+      alternate_style: true
+  - tables
+  - footnotes
+  - pymdownx.critic
+  - pymdownx.caret
+  - pymdownx.keys
+  - pymdownx.mark
+  - pymdownx.tilde
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - def_list
+  - pymdownx.arithmatex:
+      generic: true
+
+nav:
+  - 🏠 Home: index.md
+  - 📦 Installation: installation.md
+  - 📚 Usage:
+    - Overview: usage.md
+    - Teams: usage/teams.md
+    - Players: usage/players.md
+    - Games: usage/games.md
+    - Standings: usage/standings.md
+  - 🔍 API Reference: reference/
+  - 🗺️ Roadmap: roadmap.md
+  - 🤝 Contributing: contributing.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/yourusername/nhl-scraper
+      name: NHL Scraper on GitHub
+    - icon: fontawesome/brands/python
+      link: https://pypi.org/project/nhl-scraper/
+      name: NHL Scraper on PyPI
+
+extra_css:
+  - stylesheets/extra.css
