@@ -12,15 +12,66 @@ Functions:
     validate_shift_data: Validates shift data format
 """
 
+import json
 import re
 import warnings
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
+import requests
+from ftfy import fix_text
 from lxml import etree
 
 warnings.filterwarnings("ignore")
+
+
+# Function to fix encoding issues in a JSON object
+def fix_json_encoding(obj):
+    """
+    Fix encoding issues in a JSON object.
+
+    Fix the encoding issues in the JSON object. This is useful for analysis and
+    visualization.
+
+    Args:
+        obj: The JSON object to fix
+
+    Returns:
+        The fixed JSON object
+    """
+    if isinstance(obj, dict):
+        return {key: fix_json_encoding(value) for key, value in obj.items()}
+    elif isinstance(obj, list):
+        return [fix_json_encoding(item) for item in obj]
+    elif isinstance(obj, str):
+        return fix_text(obj)
+    else:
+        return obj
+
+
+def scrape_game_data(game_id: str) -> json:
+    """
+    Scrape game data from NHL API.
+
+    Scrape the game data from the NHL API. This is useful for analysis and
+    visualization.
+
+    Args:
+        game_id: The ID of the game to scrape
+
+    Returns:
+        The game data as a json object
+
+    Raises:
+        ValueError: If the game data is not found
+    """
+    url = f"https://api-web.nhle.com/v1/gamecenter/{game_id}/play-by-play"
+    response = requests.get(url)
+    response.raise_for_status()
+    data = response.json()
+
+    return data
 
 
 def validate_event_types(pbp_df: pd.DataFrame) -> None:
@@ -137,13 +188,25 @@ def validate_shift_data(df: pd.DataFrame) -> None:
         ValueError: If validation fails
     """
     required_columns = [
-        "playerId",
-        "teamId",
-        "period",
-        "startTime",
-        "endTime",
+        "id",
+        "detailCode",
         "duration",
-        "shiftDuration",
+        "endTime",
+        "eventDescription",
+        "eventDetails",
+        "eventNumber",
+        "firstName",
+        "gameId",
+        "hexValue",
+        "lastName",
+        "period",
+        "playerId",
+        "shiftNumber",
+        "startTime",
+        "teamAbbrev",
+        "teamId",
+        "teamName",
+        "typeCode",
     ]
 
     missing_columns = [col for col in required_columns if col not in df.columns]
@@ -152,6 +215,51 @@ def validate_shift_data(df: pd.DataFrame) -> None:
 
     if df.empty:
         raise ValueError("No shift data found")
+
+    # Reorder columns for better readability
+    expected_order = [
+        "id",
+        "playerId",
+        "firstName",
+        "lastName",
+        "startTime",
+        "endTime",
+        "duration",
+        "period",
+        "shiftNumber",
+        "teamAbbrev",
+        "teamId",
+        "teamName",
+        "gameId",
+        "hexValue",
+        "eventDescription",
+        "eventDetails",
+        "eventNumber",
+        "typeCode",
+        "detailCode",
+    ]
+    df = df[expected_order]
+
+    # Validate important data types
+    # str : startTime, endTime,	duration
+    for col in ["startTime", "endTime", "duration"]:
+        if not pd.api.types.is_string_dtype(df[col]):
+            df[col] = df[col].astype(str)
+
+    # int : id, playerId, shiftNumber, period, eventNumber, detailCode, typeCode,
+    for col in [
+        "id",
+        "playerId",
+        "shiftNumber",
+        "period",
+        "eventNumber",
+        "detailCode",
+        "typeCode",
+    ]:
+        if not pd.api.types.is_integer_dtype(df[col]):
+            df[col] = df[col].astype(int)
+
+    return df
 
 
 def parse_html_time_etree(time_text: str) -> Tuple[str, str, str]:
@@ -225,50 +333,6 @@ def process_player_name(player_data: Dict) -> Dict:
     }
 
 
-def extract_roster_info(roster_data: Dict, team_info: Dict) -> Tuple[List[Dict], Dict]:
-    """
-    Extract and processes roster information from API response.
-
-    Extract and process the roster information from the API response. This
-    is useful for analysis and visualization.
-
-    Args:
-        roster_data: Dictionary containing roster data
-        team_info: Dictionary containing team information
-
-    Returns:
-        Tuple containing:
-            - List of player dictionaries
-            - Dictionary of team metadata
-    """
-    players = []
-    team_meta = {
-        "teamId": team_info.get("id"),
-        "teamAbbrev": team_info.get("abbrev"),
-        "teamName": team_info.get("name", {}).get("default"),
-        "teamTriCode": team_info.get("triCode"),
-    }
-
-    for position in ["forwards", "defensemen", "goalies"]:
-        if position in roster_data:
-            for player in roster_data[position]:
-                player_dict = {
-                    "playerId": player.get("id"),
-                    "positionCode": player.get("positionCode"),
-                    "jerseyNumber": player.get("jerseyNumber"),
-                    "captain": player.get("captain", False),
-                    "alternate": player.get("alternate", False),
-                    "starter": player.get("starter", False),
-                    "scratched": player.get("scratched", False),
-                    "positionType": position[:-1] if position != "defensemen" else "defenseman",
-                }
-                player_dict.update(process_player_name(player))
-                player_dict.update(team_meta)
-                players.append(player_dict)
-
-    return players, team_meta
-
-
 def validate_roster_data(df: pd.DataFrame) -> None:
     """
     Validate roster DataFrame for required columns and data integrity.
@@ -283,29 +347,39 @@ def validate_roster_data(df: pd.DataFrame) -> None:
         ValueError: If validation fails
     """
     required_columns = [
-        "playerId",
         "teamId",
+        "playerId",
+        "sweaterNumber",
         "positionCode",
-        "firstName",
-        "lastName",
-        "fullName",
-        "jerseyNumber",
+        "headshot",
+        "firstName.default",
+        "lastName.default",
     ]
 
     missing_columns = [col for col in required_columns if col not in df.columns]
+
+    # Add new position column for F : Ÿenseman, G : Goalie
+    df["position"] = np.where(~df["positionCode"].isin(["G", "D"]), "F", df["positionCode"])
+
+    # Reorder columns to put position after positionCode
+    cols = df.columns.tolist()
+    pos_idx = cols.index("positionCode")
+    cols.remove("position")
+    cols.insert(pos_idx + 1, "position")
+    df = df[cols]
+
     if missing_columns:
         raise ValueError(f"Missing required columns: {missing_columns}")
 
     if df.empty:
         raise ValueError("No roster data found")
 
+    return df
+
 
 def convert_time_to_seconds(time_str: str) -> int:
     """
     Convert time string to seconds. Handles both HH:MM:SS and MM:SS formats.
-
-    Convert the time string to seconds. This is useful for analysis and
-    visualization.
 
     Args:
         time_str: Time in either HH:MM:SS or MM:SS format
@@ -316,20 +390,24 @@ def convert_time_to_seconds(time_str: str) -> int:
     Raises:
         ValueError: If time format is invalid
     """
+    # Handle None or empty string cases
+    if time_str is None or time_str == "" or time_str == "None":
+        return 0
+
     try:
         # Split the time string
         parts = time_str.split(":")
 
         if len(parts) == 3:  # HH:MM:SS
             hours, minutes, seconds = map(int, parts)
-            return hours * 3600 + minutes * 60 + seconds
+            return int(hours * 3600 + minutes * 60 + seconds)
         elif len(parts) == 2:  # MM:SS
             minutes, seconds = map(int, parts)
-            return minutes * 60 + seconds
+            return int(minutes * 60 + seconds)
         else:
-            raise ValueError(f"Invalid time format: {time_str}. " "Expected HH:MM:SS or MM:SS")
+            raise ValueError(f"Invalid time format: {time_str}. Expected HH:MM:SS or MM:SS")
     except (ValueError, AttributeError) as e:
-        raise ValueError(f"Error converting time: {time_str}. " f"Details: {str(e)}")
+        raise ValueError(f"Error converting time: {time_str}. Details: {str(e)}")
 
 
 def format_seconds_to_time(seconds: int, include_hours: bool = False) -> str:
@@ -389,18 +467,18 @@ def calculate_shift_stats(shift_data: pd.DataFrame) -> pd.DataFrame:
     ]
     shift_data["gameTimeEnd"] = (shift_data["period"] - 1) * 1200 + shift_data["endTimeInSeconds"]
 
-    # Add formatted duration for display
-    shift_data["durationFormatted"] = shift_data["shiftDuration"].apply(
-        lambda x: format_seconds_to_time(x)
-    )
+    # # Add formatted duration for display
+    # shift_data["durationFormatted"] = shift_data["shiftDuration"].apply(
+    #     lambda x: format_seconds_to_time(x)
+    # )
 
-    # Add game time formatted
-    shift_data["gameTimeStartFormatted"] = shift_data["gameTimeStart"].apply(
-        lambda x: format_seconds_to_time(x, include_hours=True)
-    )
-    shift_data["gameTimeEndFormatted"] = shift_data["gameTimeEnd"].apply(
-        lambda x: format_seconds_to_time(x, include_hours=True)
-    )
+    # # Add game time formatted
+    # shift_data["gameTimeStartFormatted"] = shift_data["gameTimeStart"].apply(
+    #     lambda x: format_seconds_to_time(x, include_hours=True)
+    # )
+    # shift_data["gameTimeEndFormatted"] = shift_data["gameTimeEnd"].apply(
+    #     lambda x: format_seconds_to_time(x, include_hours=True)
+    # )
 
     return shift_data
 

@@ -32,6 +32,7 @@ dependencies = [
     "requests>=2.25.0",
     "lxml>=4.9.0",
     "beautifulsoup4>=4.9.0",
+    "ftfy"
 ]
 
 [project.optional-dependencies]
@@ -46,6 +47,7 @@ dev = [
     "pandas-stubs",
     "lxml-stubs",
     "types-beautifulsoup4",
+
 ]
 docs = [
     "mkdocs>=1.5.0",

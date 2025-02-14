@@ -10,12 +10,14 @@ This module provides functions to scrape NHL player data including:
 Functions:
     scrapePlayer: Get detailed player information
     scrapePlayerStats: Get player statistics
+    scrapePlayerGameLog: Get player game log
 """
 
 import warnings
 from datetime import datetime
 from typing import Dict, Optional, Union
 
+import numpy as np
 import pandas as pd
 import requests
 
@@ -55,7 +57,7 @@ def scrapePlayerProfile(player_id: int) -> Dict:
             "birthDate": data.get("birthDate"),
             "birthCity": data.get("birthCity", {}).get("default"),
             "birthStateProvince": data.get("birthStateProvince", {}).get("default"),
-            "birthCountry": data.get("birthCountry", {}).get("default"),
+            "birthCountry": data.get("birthCountry", {}),
             "heightInInches": data.get("heightInInches"),
             "heightInCentimeters": data.get("heightInCentimeters"),
             "weightInPounds": data.get("weightInPounds"),
@@ -79,7 +81,7 @@ def scrapePlayerProfile(player_id: int) -> Dict:
 
 # Scrape Player Stats
 def scrapePlayerStats(
-    player_id: int, season: Optional[str] = None, stats_type: str = "yearByYear"
+    player_id: int, season: Optional[str] = None, stats_type: str = "featuredStats"
 ) -> pd.DataFrame:
     """
     Scrapes player statistics.
@@ -88,32 +90,43 @@ def scrapePlayerStats(
         player_id (int): NHL player ID
         season (str, optional): Season in 'YYYYYYYY' format. If None, returns all seasons.
         stats_type (str): Type of stats to return:
-            - 'yearByYear': Career statistics by season
-            - 'careerRegularSeason': Career regular season totals
-            - 'careerPlayoffs': Career playoff totals
-            - 'homeAndAway': Current season home/away splits
-            - 'winLoss': Current season win/loss splits
-            - 'byMonth': Current season monthly splits
-            - 'byDayOfWeek': Current season day-of-week splits
+            - 'featuredStats': Featured stats for the current season
+            - 'careerTotals': Career totals
+            - 'last5Games': Last 5 games stats
+            - 'seasonTotals': Season totals
+
 
     Returns:
         pd.DataFrame: Player statistics based on specified type
+
+    Raises:
+        ValueError: If stats_type is invalid
+        requests.HTTPError: If API request fails
+        Exception: If other error occurs
     """
     try:
-        url = f"https://api-web.nhle.com/v1/player/{player_id}/stats/{stats_type}"
+        url = f"https://api-web.nhle.com/v1/player/{player_id}/landing"
         response = requests.get(url)
         response.raise_for_status()
         data = response.json()
 
-        # Process different stat types
-        if stats_type == "yearByYear":
-            stats = pd.json_normalize(data["splits"])
-        else:
-            stats = pd.json_normalize(data)
+        # Validate stats_type
+        valid_types = ("featuredStats", "careerTotals", "last5Games", "seasonTotals")
+        if stats_type not in valid_types:
+            raise ValueError(f"Invalid stats_type. Must be one of: {', '.join(valid_types)}")
 
-        # Filter for specific season if provided
-        if season and stats_type == "yearByYear":
-            stats = stats[stats["season"] == season]
+        stats = pd.json_normalize(data[stats_type])
+
+        # Add player info
+        stats["firstName"] = data.get("firstName", {}).get("default")
+        stats["lastName"] = data.get("lastName", {}).get("default")
+        stats["fullName"] = f"{data['firstName']['default']} {data['lastName']['default']}"
+        stats["positionCode"] = data.get("position")
+        stats["position"] = np.where(
+            ~stats["positionCode"].isin(["G", "D"]), "F", stats["positionCode"]
+        )
+        stats["currentTeamId"] = data.get("currentTeamId")
+        stats["currentTeamAbbrev"] = data.get("currentTeamAbbrev")
 
         # Add metadata
         stats["playerId"] = player_id
@@ -179,38 +192,3 @@ def scrapePlayerGameLog(
         raise requests.HTTPError(f"Failed to fetch game log: {str(e)}")
     except Exception as e:
         raise Exception(f"Error processing game log: {str(e)}")
-
-
-# Scrape Player Career Highlights
-def scrapePlayerCareerHighlights(player_id: int) -> pd.DataFrame:
-    """
-    Scrapes player career highlights and milestones.
-
-    Args:
-        player_id (int): NHL player ID
-
-    Returns:
-        pd.DataFrame: Career highlights and milestones
-    """
-    try:
-        url = f"https://api-web.nhle.com/v1/player/{player_id}/landing"
-        response = requests.get(url)
-        response.raise_for_status()
-        data = response.json()
-
-        if "careerHighlights" not in data:
-            return pd.DataFrame()  # Return empty DataFrame if no highlights
-
-        highlights = pd.json_normalize(data["careerHighlights"])
-
-        # Add metadata
-        highlights["playerId"] = player_id
-        highlights["meta_datetime"] = datetime.now()
-        highlights["meta_source"] = "NHL API"
-
-        return highlights
-
-    except requests.RequestException as e:
-        raise requests.HTTPError(f"Failed to fetch career highlights: {str(e)}")
-    except Exception as e:
-        raise Exception(f"Error processing highlights data: {str(e)}")

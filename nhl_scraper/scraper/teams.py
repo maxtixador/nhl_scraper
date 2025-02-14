@@ -13,6 +13,7 @@ Functions:
     scrapeTeamStats: Get team statistics
     scrapeTeamProspects: Get team prospects
     scrapeTeamSchedule: Get team schedule
+    scrapeTeamDraftHistory: Get team draft history
 """
 
 import warnings
@@ -83,13 +84,13 @@ def scrapeTeams() -> pd.DataFrame:
 
 
 # Team Roster
-def scrapeTeamRoster(team: str, season: str) -> pd.DataFrame:
+def scrapeTeamRoster(team: str, season: Union[str, int]) -> pd.DataFrame:
     """
     Scrapes roster data from the NHL website for a given team and season.
 
     Parameters:
         team (str): Team abbreviation (e.g., 'MTL', 'TOR', 'BOS')
-        season (str): Season in 'YYYYYYYY' format (e.g., '20232024')
+        season (Union[str, int]): Season in 'YYYYYYYY' format (e.g., '20232024' or 20232024)
 
     Returns:
         pd.DataFrame: A DataFrame containing team roster data with columns:
@@ -111,11 +112,13 @@ def scrapeTeamRoster(team: str, season: str) -> pd.DataFrame:
         if not isinstance(team, str) or len(team) < 2:
             raise ValueError(f"Invalid team abbreviation: {team}")
 
-        if not isinstance(season, str) or len(season) != 8:
+        # Convert season to string if it's an integer
+        season_str = str(season)
+        if not len(season_str) == 8:
             raise ValueError(f"Invalid season format: {season}. Must be 'YYYYYYYY' format.")
 
         # Make API request
-        url = f"https://api-web.nhle.com/v1/roster/{team}/{season}"
+        url = f"https://api-web.nhle.com/v1/roster/{team}/{season_str}"
         response = requests.get(url)
         response.raise_for_status()
         data = response.json()
@@ -135,7 +138,7 @@ def scrapeTeamRoster(team: str, season: str) -> pd.DataFrame:
 
         # Add team and season info
         df["team"] = team
-        df["season"] = season
+        df["season"] = season_str
 
         # Add metadata
         df["meta_datetime"] = pd.to_datetime("now")
@@ -159,7 +162,7 @@ def scrapeTeamRoster(team: str, season: str) -> pd.DataFrame:
 
 # Team Stats
 def scrapeTeamStats(
-    team: str, season: str, session: Union[str, int] = 2, goalies: bool = False
+    team: str, season: Union[str, int], session: Union[str, int] = 2, goalies: bool = False
 ) -> pd.DataFrame:
     """
     Scrapes team stats data from the NHL website for a given team and season.
@@ -200,7 +203,8 @@ def scrapeTeamStats(
             raise ValueError(f"Invalid team abbreviation: {team}")
 
         # Validate season
-        if not isinstance(season, str) or len(season) != 8:
+        season_str = str(season)
+        if not len(season_str) == 8:
             raise ValueError(f"Invalid season format: {season}. Must be 'YYYYYYYY' format.")
 
         # Validate and process session
@@ -336,13 +340,13 @@ def scrapeTeamProspects(team: str) -> pd.DataFrame:
 
 
 # Schedule
-def scrapeTeamSchedule(team: str, season: str) -> pd.DataFrame:
+def scrapeTeamSchedule(team: str, season: Union[str, int]) -> pd.DataFrame:
     """
     Scrapes schedule data from the NHL website for a given team and season.
 
     Parameters:
         team (str): Team abbreviation (e.g., 'MTL', 'TOR', 'BOS')
-        season (str): Season in 'YYYYYYYY' format (e.g., '20232024')
+        season (Union[str, int]): Season in 'YYYYYYYY' format (e.g., '20232024' or 20232024)
 
     Returns:
         pd.DataFrame: A DataFrame containing schedule data with columns:
@@ -368,11 +372,12 @@ def scrapeTeamSchedule(team: str, season: str) -> pd.DataFrame:
             raise ValueError(f"Invalid team abbreviation: {team}")
 
         # Validate season
-        if not isinstance(season, str) or len(season) != 8:
+        season_str = str(season)
+        if not len(season_str) == 8:
             raise ValueError(f"Invalid season format: {season}. Must be 'YYYYYYYY' format.")
 
         # Make API request
-        url = f"https://api-web.nhle.com/v1/club-schedule-season/{team}/{season}"
+        url = f"https://api-web.nhle.com/v1/club-schedule-season/{team}/{season_str}"
         response = requests.get(url)
         response.raise_for_status()
         data = response.json()
@@ -539,6 +544,7 @@ def scrapeActiveTeams() -> pd.DataFrame:
     """
     Scrapes active team data from the NHL website.
 
+    This function is used to scrape active team data from the NHL website.
     Originally contributed by @Hamalytics on Twitter/X.
 
     Returns:
@@ -606,5 +612,78 @@ def scrapeActiveTeams() -> pd.DataFrame:
         raise requests.HTTPError(f"Failed to fetch active teams data: {str(e)}")
     except (KeyError, ValueError) as e:
         raise ValueError(f"Error processing active teams data: {str(e)}")
+    except Exception as e:
+        raise Exception(f"An unexpected error occurred: {str(e)}")
+
+
+# Draft History
+def scrapeTeamDraftHistory(franchiseId: Union[str, int]) -> pd.DataFrame:
+    """
+    Scrapes draft history for a given franchise from the NHL website.
+
+    This function is used to scrape draft history for a given franchise from the NHL website.
+    The franchise ID can be found in the NHL Records API.
+
+    Parameters:
+        franchiseId (Union[str, int]): The franchise ID from NHL Records API.
+            Used to identify the team for draft history scraping.
+
+    Returns:
+        pd.DataFrame: A DataFrame containing the scraped draft history.
+
+    Raises:
+        ValueError: If the franchise ID is invalid
+        requests.HTTPError: If the API request fails
+        KeyError: If the API response format is unexpected
+    """
+    franchiseId = str(franchiseId)
+    if not franchiseId:
+        raise ValueError("Invalid franchise ID: Must be a non-empty string or integer")
+
+    try:
+        # Base URL for NHL Records API
+        base_url = "https://records.nhl.com/site/api/draft"
+
+        # Include parameters for the API request
+        includes = [
+            "draftProspect.id",
+            "franchiseTeam",
+            "player.birthStateProvince",
+            "player.birthCountry",
+            "player.position",
+            "player.onRoster",
+            "player.yearsPro",
+            "player.firstName",
+            "player.lastName",
+            "player.id",
+            "team.id",
+            "team.placeName",
+            "team.commonName",
+            "team.fullName",
+            "team.triCode",
+            "team.logos",
+        ]
+
+        # Build the URL with parameters
+        url = (
+            f"{base_url}"
+            f"?{'&'.join(f'include={include}' for include in includes)}"
+            f"&cayenneExp=franchiseTeam.franchiseId=%22{franchiseId}%22"
+        )
+        response = requests.get(url)
+        response.raise_for_status()
+        data = response.json()
+
+        draft_df = pd.json_normalize(data["data"])
+
+        draft_df["meta_datetime"] = pd.to_datetime("now")
+        draft_df["meta_source"] = "NHL Records API"
+
+        return draft_df
+
+    except requests.RequestException as e:
+        raise requests.HTTPError(f"Failed to fetch draft history: {str(e)}")
+    except (KeyError, ValueError) as e:
+        raise ValueError(f"Error processing draft history: {str(e)}")
     except Exception as e:
         raise Exception(f"An unexpected error occurred: {str(e)}")

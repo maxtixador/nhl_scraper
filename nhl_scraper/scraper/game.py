@@ -24,17 +24,19 @@ from typing import Tuple, Union
 import numpy as np
 import pandas as pd
 import requests
+from bs4 import BeautifulSoup
 from lxml.etree import _Element
 from pandas import DataFrame
 
 from nhl_scraper.scraper.types import EventDict, XPathResult
 from nhl_scraper.scraper.utils import (
     calculate_shift_stats,
+    convert_time_to_seconds,
     etree,
-    extract_roster_info,
     fix_coordinates,
-    parse_html_time_etree,
+    fix_json_encoding,
     process_event_players,
+    scrape_game_data,
     validate_game_id,
     validate_roster_data,
     validate_shift_data,
@@ -69,10 +71,7 @@ def scrapeGamePlayByPlay(game_id: Union[str, int]) -> DataFrame:
         game_id = validate_game_id(game_id)
 
         # Make API request
-        url = f"https://api-web.nhle.com/v1/gamecenter/{game_id}/play-by-play"
-        response = requests.get(url)
-        response.raise_for_status()
-        data = response.json()
+        data = scrape_game_data(game_id)
 
         # Create initial DataFrame
         pbp_df = pd.json_normalize(data["plays"])
@@ -446,28 +445,18 @@ def scrapeGameRosters(game_id: Union[str, int]) -> DataFrame:
         game_id = validate_game_id(game_id)
 
         # Make API request
-        url = f"https://api-web.nhle.com/v1/gamecenter/{game_id}/boxscore"
-        response = requests.get(url)
-        response.raise_for_status()
-        data = response.json()
+        data = scrape_game_data(game_id)
 
-        # Process home and away rosters
-        all_players = []
+        roster_df = pd.json_normalize(data["rosterSpots"])
 
-        # Process home team
-        home_players, home_meta = extract_roster_info(
-            data.get("homeTeam", {}).get("roster", {}), data.get("homeTeam", {})
-        )
-        all_players.extend(home_players)
+        abbrev_dict = {
+            data["awayTeam"]["id"]: data["awayTeam"]["abbrev"],
+            data["homeTeam"]["id"]: data["homeTeam"]["abbrev"],
+        }
 
-        # Process away team
-        away_players, away_meta = extract_roster_info(
-            data.get("awayTeam", {}).get("roster", {}), data.get("awayTeam", {})
-        )
-        all_players.extend(away_players)
+        roster_df["teamAbbrev"] = roster_df["teamId"].map(abbrev_dict)
 
-        # Create DataFrame
-        roster_df = pd.DataFrame(all_players)
+        roster_df["is_home"] = (roster_df["teamId"] == data["homeTeam"]["id"]).astype(int)
 
         # Add game information
         roster_df["gameId"] = game_id
@@ -480,10 +469,10 @@ def scrapeGameRosters(game_id: Union[str, int]) -> DataFrame:
         roster_df["meta_source"] = "NHL API"
 
         # Validate data
-        validate_roster_data(roster_df)
+        roster_df = validate_roster_data(roster_df)
 
         # Sort DataFrame
-        sort_columns = ["teamAbbrev", "positionType", "jerseyNumber"]
+        sort_columns = ["teamAbbrev", "positionCode", "sweaterNumber"]
         roster_df = roster_df.sort_values(sort_columns)
 
         return roster_df
@@ -523,31 +512,49 @@ def scrapeGameShifts(game_id: Union[str, int]) -> DataFrame:
 
         # Make API requests
         shifts_url = f"https://api.nhle.com/stats/rest/en/shiftcharts?cayenneExp=gameId={game_id}"
-        game_url = f"https://api-web.nhle.com/v1/gamecenter/{game_id}/boxscore"
-
+        game_data = scrape_game_data(game_id)
         shifts_response = requests.get(shifts_url)
-        game_response = requests.get(game_url)
 
         shifts_response.raise_for_status()
-        game_response.raise_for_status()
 
         shifts_data = shifts_response.json()
-        game_data = game_response.json()
+
+        # Fix encoding issues in the JSON object
+        shifts_data = fix_json_encoding(shifts_data)
 
         # Get roster information for player details
         roster_df = scrapeGameRosters(game_id)
-        player_info = roster_df[["playerId", "fullName", "teamId", "teamAbbrev", "positionCode"]]
+        roster_df = validate_roster_data(roster_df)
+
+        player_info = roster_df[
+            [
+                "teamId",
+                "playerId",
+                "sweaterNumber",
+                "positionCode",
+                "position",
+                "headshot",
+                "teamAbbrev",
+                "is_home",
+            ]
+        ]
 
         # Process shifts data
         if "data" not in shifts_data or not shifts_data["data"]:
             raise ValueError(f"No shift data found for game {game_id}")
 
-        shifts_df = pd.DataFrame(shifts_data["data"])
+        shifts_df = pd.json_normalize(shifts_data["data"])
 
-        # Merge with player information
+        # Validate shift data
+        shifts_df = validate_shift_data(shifts_df)
+
+        # # Merge with player information
         shifts_df = shifts_df.merge(
-            player_info, left_on="playerId", right_on="playerId", how="left"
+            player_info, on=["playerId", "teamId", "teamAbbrev"], how="left"
         )
+
+        # Add full name
+        shifts_df["fullName"] = shifts_df["firstName"] + " " + shifts_df["lastName"]
 
         # Calculate additional statistics
         shifts_df = calculate_shift_stats(shifts_df)
@@ -563,10 +570,13 @@ def scrapeGameShifts(game_id: Union[str, int]) -> DataFrame:
         shifts_df["meta_source"] = "NHL API"
 
         # Validate data
-        validate_shift_data(shifts_df)
+        # validate_shift_data(shifts_df)
 
         # Sort DataFrame
-        sort_columns = ["teamAbbrev", "period", "startTimeInSeconds", "playerId"]
+        sort_columns = [
+            "teamAbbrev",
+            "period",
+        ]  # "startTimeInSeconds", "playerId"]
         shifts_df = shifts_df.sort_values(sort_columns)
 
         # Add shift numbers
@@ -597,7 +607,6 @@ def scrapeGameShiftsLegacy(game_id: Union[str, int]) -> DataFrame:
             - Shift details (start, end, duration)
             - Period information
             - Calculated statistics
-            - Metadata
 
     Raises:
         ValueError: If game ID is invalid
@@ -608,92 +617,181 @@ def scrapeGameShiftsLegacy(game_id: Union[str, int]) -> DataFrame:
         # Validate game ID
         game_id = validate_game_id(game_id)
 
-        # Make request to HTML report
-        url = f"http://www.nhl.com/scores/htmlreports/{game_id[:4]}/TH{game_id[4:]}.HTM"
-        response = requests.get(url)
-        response.raise_for_status()
+        year1 = str(game_id)[:4]
+        year2 = int(year1) + 1
+        year1_2 = f"{year1}{year2}"
 
-        # Parse HTML with lxml
-        parser = etree.HTMLParser()
-        tree = etree.fromstring(response.content, parser)
+        shortId = str(game_id)[4:]
 
-        # Find all shift rows
-        all_shifts = []
-        current_team = None
-        current_period = None
+        url_template = f"https://www.nhl.com/scores/htmlreports/{year1}{year2}/T{{HV}}{shortId}.HTM"
 
-        # Process each row using XPath
-        for row in tree.xpath("//tr"):
-            # Check for period headers
-            period_cell = row.xpath('.//td[@class="periodnumber"]')
-            if period_cell:
-                current_period = int(period_cell[0].text.strip())
-                continue
+        team_shifts_dfs = []
 
-            # Check for team headers
-            team_cell = row.xpath('.//td[@class="teamHeading"]')
-            if team_cell:
-                current_team = team_cell[0].text.strip()
-                continue
+        try:
+            for side in ["H", "V"]:
+                url = url_template.format(HV=side)
 
-            # Process shift rows
-            shift_cells = row.xpath(
-                './/td[@class="playerHeading" or @class="playerHeading + border"]'
-            )
-            if current_team and current_period and shift_cells:
-                try:
-                    # Get player info
-                    number, name = clean_player_name_etree(shift_cells[0])
+            # Fetch the webpage content
+            response = requests.get(url)
+            response.raise_for_status()
 
-                    # Get shift times
-                    time_cell = shift_cells[1].text.strip()
-                    start_time, end_time, duration = parse_html_time_etree(time_cell)
+            # Use BeautifulSoup with lxml parser
+            soup = BeautifulSoup(response.content, "lxml")
 
-                    shift = {
-                        "jerseyNumber": number,
-                        "playerName": name,
-                        "startTime": start_time,
-                        "endTime": end_time,
-                        "duration": duration,
-                        "period": current_period,
-                        "team": current_team,
+            # Convert BeautifulSoup object to lxml etree
+            tree = etree.HTML(str(soup))
+
+            # Extract player names using XPath
+            player_names = tree.xpath('.//td[@class="playerHeading + border"]/text()')
+
+            # Extract shift details using XPath
+            shift_rows = tree.xpath('.//tr[@class="evenColor"] | .//tr[@class="oddColor"]')
+
+            # Store extracted data
+            shift_data = []
+            for row in shift_rows:
+                shift_number = (
+                    row.xpath("./td[1]/text()")[0].strip() if row.xpath("./td[1]/text()") else ""
+                )
+                period = (
+                    row.xpath("./td[2]/text()")[0].strip() if row.xpath("./td[2]/text()") else ""
+                )
+                start_time = (
+                    row.xpath("./td[3]/text()")[0].strip() if row.xpath("./td[3]/text()") else ""
+                )
+                end_time = (
+                    row.xpath("./td[4]/text()")[0].strip() if row.xpath("./td[4]/text()") else ""
+                )
+                duration = (
+                    row.xpath("./td[5]/text()")[0].strip() if row.xpath("./td[5]/text()") else ""
+                )
+                event = (
+                    row.xpath("./td[6]/text()")[0].strip() if row.xpath("./td[6]/text()") else ""
+                )
+
+                shift_data.append(
+                    {
+                        "Shift Number": shift_number,
+                        "Period": period,
+                        "Start Time": start_time,
+                        "End Time": end_time,
+                        "Duration": duration,
+                        "Event": event,
                     }
-                    all_shifts.append(shift)
+                )
 
-                except (ValueError, IndexError) as e:
-                    print(f"Warning: Skipping invalid shift row: {e}")
+            # Output extracted data
+            shifts_df = pd.DataFrame(shift_data)
 
-        # Create DataFrame
-        shifts_df = pd.DataFrame(all_shifts)
+            shifts_df["is_home"] = 1 if side == "H" else 0
 
-        if shifts_df.empty:
-            raise ValueError("No valid shift data found")
+            # Replace 'OT' with 4 ### TO FIX EVENTUALLY BECAUSE OF PLAYOFFS
+            shifts_df["Period"] = shifts_df["Period"].replace("OT", 4)
+            shifts_df["Period"] = pd.to_numeric(shifts_df["Period"], errors="coerce")
 
-        # Calculate additional statistics
-        shifts_df = calculate_shift_stats(shifts_df)
+            shifts_df["Shift Number"] = pd.to_numeric(shifts_df["Shift Number"], errors="coerce")
+
+            # Assign a row with 1 where 	Start Time has a / in it and filter out 0s
+            shifts_df["dummy"] = np.where(shifts_df["Start Time"].str.contains("/"), 1, 0)
+            shifts_df = shifts_df[shifts_df["dummy"] == 1]
+            shifts_df = shifts_df.drop(columns=["dummy"])
+
+            # Assign player names
+            shifts_df["Player Name"] = None
+            player_index = 0
+
+            shifts_df["Shift Number"] = pd.to_numeric(shifts_df["Shift Number"], errors="coerce")
+            shifts_df = shifts_df.reset_index(drop=True)
+            # Iterate through shifts and assign player names
+            for i in range(len(shifts_df)):
+                if player_index < len(player_names):
+                    shifts_df.loc[i, "Player Name"] = player_names[player_index]
+
+                # If shift number decreases, move to the next player
+                if (
+                    i > 0
+                    and shifts_df.loc[i, "Shift Number"] < shifts_df.loc[i - 1, "Shift Number"]
+                ):
+                    player_index += 1  # Move to the next player
+
+            # Split the "Player Name" column into "Player Number" and "Player Name"
+            shifts_df[["Player Number", "Player Name"]] = shifts_df["Player Name"].str.split(
+                " ", n=1, expand=True
+            )
+
+            # Convert "Player Number" to numeric for sorting or analysis
+            shifts_df["Player Number"] = pd.to_numeric(shifts_df["Player Number"], errors="coerce")
+            shifts_df["firstName"] = shifts_df["Player Name"].str.split(", ").str[1]
+
+            shifts_df["lastName"] = shifts_df["Player Name"].str.split(", ").str[0]
+            # Remove number from firstName
+            shifts_df["lastName"] = shifts_df["lastName"].str.replace(r"\d+", "")
+            shifts_df["lastName"] = shifts_df["lastName"].str.strip()
+
+            shifts_df[["Start Time (Elapsed)", "Start Time (Remaining)"]] = shifts_df[
+                "Start Time"
+            ].str.split(" ", n=1, expand=True)
+            shifts_df[["End Time (Elapsed)", "End Time (Remaining)"]] = shifts_df[
+                "End Time"
+            ].str.split(" ", n=1, expand=True)
+
+            # Strip "/ " in remaining cols
+            shifts_df["Start Time (Remaining)"] = shifts_df["Start Time (Remaining)"].str.replace(
+                "/ ", ""
+            )
+            shifts_df["End Time (Remaining)"] = shifts_df["End Time (Remaining)"].str.replace(
+                "/ ", ""
+            )
+
+            shifts_df = shifts_df.drop(columns=["Start Time", "End Time"])
+
+            for col in [
+                "Start Time (Elapsed)",
+                "Start Time (Remaining)",
+                "End Time (Elapsed)",
+                "End Time (Remaining)",
+                "Duration",
+            ]:
+                col_with_seconds = col + " (Seconds)"
+                shifts_df[col_with_seconds] = shifts_df[col].apply(convert_time_to_seconds)
+
+            team_shifts_dfs.append(shifts_df)
+
+        except requests.RequestException as e:
+            raise requests.HTTPError(f"Failed to fetch HTML shift report: {str(e)}")
+        except (ValueError, etree.ParseError) as e:
+            raise ValueError(f"Error processing HTML shift data: {str(e)}")
+        except Exception as e:
+            print(f"Error processing HTML shift data: {str(e)}")
+            return pd.DataFrame()
+
+        shifts_df = pd.concat(team_shifts_dfs)
+        shifts_df = shifts_df.reset_index(drop=True)
+
+        shifts_df["startTimeInSeconds"] = (
+            shifts_df["Start Time (Elapsed) (Seconds)"] + (shifts_df["Period"] - 1) * 60 * 20
+        )
+        shifts_df["endTimeInSeconds"] = (
+            shifts_df["End Time (Elapsed) (Seconds)"] + (shifts_df["Period"] - 1) * 60 * 20
+        )
+
+        shifts_df["sweaterNumber"] = shifts_df["Player Number"]
+        shifts_df["gameId"] = game_id
 
         # Add game information
         shifts_df["gameId"] = game_id
         shifts_df["source"] = "HTML"
-        shifts_df["season"] = game_id[:4]
+        shifts_df["season"] = year1_2
 
         # Add metadata
         shifts_df["meta_datetime"] = pd.to_datetime("now")
         shifts_df["meta_source"] = "NHL HTML Reports"
 
         # Sort DataFrame
-        sort_columns = ["team", "period", "startTimeInSeconds", "jerseyNumber"]
+        sort_columns = ["Period", "startTimeInSeconds", "Player Number"]
         shifts_df = shifts_df.sort_values(sort_columns)
 
-        # Add shift numbers
-        shifts_df["shiftNumber"] = shifts_df.groupby(["team", "playerName"]).cumcount() + 1
-
         return shifts_df
-
-    except requests.RequestException as e:
-        raise requests.HTTPError(f"Failed to fetch HTML shift report: {str(e)}")
-    except (ValueError, etree.ParseError) as e:
-        raise ValueError(f"Error processing HTML shift data: {str(e)}")
     except Exception as e:
         raise Exception(f"An unexpected error occurred: {str(e)}")
 
