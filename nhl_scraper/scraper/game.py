@@ -28,8 +28,8 @@ from bs4 import BeautifulSoup
 from lxml.etree import _Element
 from pandas import DataFrame
 
-from nhl_scraper.scraper.types import EventDict, XPathResult
-from nhl_scraper.scraper.utils import (
+from nhl_scraper.scraper.utils.types import EventDict, XPathResult
+from nhl_scraper.scraper.utils.utils import (
     calculate_shift_stats,
     convert_time_to_seconds,
     etree,
@@ -691,7 +691,7 @@ def scrapeGameShiftsLegacy(game_id: Union[str, int]) -> DataFrame:
 
             shifts_df["Shift Number"] = pd.to_numeric(shifts_df["Shift Number"], errors="coerce")
 
-            # Assign a row with 1 where 	Start Time has a / in it and filter out 0s
+            # Assign a row with 1 where "Start Time" has a / in it and filter out 0s
             shifts_df["dummy"] = np.where(shifts_df["Start Time"].str.contains("/"), 1, 0)
             shifts_df = shifts_df[shifts_df["dummy"] == 1]
             shifts_df = shifts_df.drop(columns=["dummy"])

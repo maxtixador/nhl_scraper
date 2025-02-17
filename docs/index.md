@@ -18,6 +18,5 @@ Check out the [Installation](installation.md) guide to get started, then head ov
 
 - [Installation](installation.md) - Instructions for installing the package
 - [Usage Guide](usage.md) - Detailed examples and use cases
-- [API Reference](reference/) - Complete API documentation
 - [Roadmap](roadmap.md) - Future development plans and upcoming features
 - [Contributing](contributing.md) - Guidelines for contributing to the project

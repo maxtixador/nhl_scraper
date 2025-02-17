@@ -32,7 +32,9 @@ dependencies = [
     "requests>=2.25.0",
     "lxml>=4.9.0",
     "beautifulsoup4>=4.9.0",
-    "ftfy"
+    "ftfy",
+    "selenium",
+    "webdriver-manager"
 ]
 
 [project.optional-dependencies]
@@ -46,7 +48,7 @@ dev = [
     "isort>=5.12",
     "pandas-stubs",
     "lxml-stubs",
-    "types-beautifulsoup4",
+    "types-beautifulsoup4"
 
 ]
 docs = [

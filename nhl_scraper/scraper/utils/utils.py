@@ -10,6 +10,12 @@ Functions:
     fix_coordinates: Normalizes rink coordinates
     calculate_shift_stats: Calculates statistics from shift data
     validate_shift_data: Validates shift data format
+    validate_event_types: Validates event types
+    validate_game_data: Validates game data
+    validate_roster_data: Validates roster data
+    validate_draft_data: Validates draft data
+    validate_draft_legacy_data: Validates draft legacy data
+    validate_draft_rankings_data: Validates draft rankings data
 """
 
 import json

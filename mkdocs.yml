@@ -1,9 +1,9 @@
 site_name: 🏒 NHL Scraper
 site_description: A Python package for scraping NHL data
-repo_url: https://github.com/yourusername/nhl-scraper
+repo_url: https://github.com/maxtixador/nhl-scraper
 repo_name: 🏒 nhl-scraper
-site_author: Your Name
-copyright: Copyright &copy; 2024 NHL Scraper
+site_author: Max Tixador
+copyright: Copyright &copy; 2025 NHL Scraper
 
 theme:
   name: material
@@ -96,6 +96,7 @@ nav:
   - 📦 Installation: installation.md
   - 📚 Usage:
     - Overview: usage.md
+    - Draft: usage/draft.md
     - Teams: usage/teams.md
     - Players: usage/players.md
     - Games: usage/games.md
@@ -107,11 +108,15 @@ nav:
 extra:
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/yourusername/nhl-scraper
+      link: https://github.com/maxtixador/nhl-scraper
       name: NHL Scraper on GitHub
     - icon: fontawesome/brands/python
       link: https://pypi.org/project/nhl-scraper/
       name: NHL Scraper on PyPI
+    - icon: fontawesome/brands/x-twitter
+      link: https://x.com/woumaxx
+      name: Twitter
+
 
 extra_css:
   - stylesheets/extra.css

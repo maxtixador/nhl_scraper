@@ -71,10 +71,6 @@ def scrapeDraft(year: int = 2023, round: Union[int, str] = "all") -> pd.DataFram
         # Process data
         draft_df = pd.json_normalize(data["picks"])
 
-        # Check if draft_df is empty
-        if draft_df.empty:
-            raise ValueError("No draft data found")
-
         # Add metadata
         draft_df["meta_datetime"] = datetime.now()
         draft_df["meta_year"] = year

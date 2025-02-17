@@ -14,6 +14,7 @@ Functions:
     scrapeTeamProspects: Get team prospects
     scrapeTeamSchedule: Get team schedule
     scrapeTeamDraftHistory: Get team draft history
+    scrapeTeamRosterLegacy: Get team roster data from NHL Records API
 """
 
 import warnings
@@ -158,6 +159,66 @@ def scrapeTeamRoster(team: str, season: Union[str, int]) -> pd.DataFrame:
         raise ValueError(f"Error processing roster data: {str(e)}")
     except Exception as e:
         raise Exception(f"An unexpected error occurred: {str(e)}")
+
+
+def scrapeTeamRosterLegacy(teamId: Union[str, int]) -> pd.DataFrame:
+    """
+    Scrapes roster data from the NHL website for a given team and season.
+
+    Parameters:
+        teamId (Union[str, int]): The team ID from NHL Records API.
+            Used to identify the team for roster scraping.
+
+    Returns:
+        pd.DataFrame: A DataFrame containing team roster data with columns:
+            - playerId: Unique identifier for each player
+            - fullName: Player's full name
+            - position: Player's position (F/D/G)
+            - positionCode: Detailed position code
+            - shootsCatches: Player's shooting/catching hand
+            - team: Team abbreviation
+            - season: Season identifier
+            - meta columns: datetime of scraping
+
+    Raises:
+        ValueError: If parameters are invalid or data processing fails
+        requests.HTTPError: If the API request fails
+        KeyError: If the API response format is unexpected
+    """
+    try:
+        # Validate inputs
+        if not isinstance(teamId, (str, int)):
+            raise ValueError("Invalid team ID: Must be a non-empty string or integer")
+
+        # Make API request
+        url = (
+            "https://records.nhl.com/site/api/roster",
+            f"/byTeam/{teamId}?",
+            "include=id&include=firstName&include=lastName",
+            "include=sweaterNumber&include=position",
+            "include=height&include=weight",
+            "include=birthDate&include=birthCountry",
+            "include=birthCity&include=birthStateProvince",
+            "include=onRoster",
+        )
+
+        response = requests.get(url).json()
+
+        roster_df = pd.json_normalize(response["data"])
+
+        roster_df["fullName"] = roster_df["firstName"] + " " + roster_df["lastName"]
+        roster_df = roster_df.rename(columns={"id": "playerId"})
+        roster_df["teamId"] = teamId
+
+        roster_df["meta_datetime"] = pd.to_datetime("now")
+        roster_df["meta_source"] = "NHL Records API"
+
+        return roster_df
+
+    except requests.RequestException as e:
+        raise requests.HTTPError(f"Failed to fetch roster data for {teamId}: {str(e)}")
+    except (KeyError, ValueError) as e:
+        raise ValueError(f"Error processing roster data: {str(e)}")
 
 
 # Team Stats
