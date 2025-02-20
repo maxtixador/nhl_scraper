@@ -25,22 +25,25 @@ import numpy as np
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup
-from lxml.etree import _Element
+
+# from lxml.etree import _Element
 from pandas import DataFrame
 
-from nhl_scraper.scraper.utils.types import EventDict, XPathResult
-from nhl_scraper.scraper.utils.utils import (
+from nhl_scraper.scraper.tools.helper import process_play_by_play
+
+# from nhl_scraper.scraper.utils.types import EventDict, XPathResult
+from nhl_scraper.scraper.tools.utils import (  # fix_coordinates,; process_event_players,; ; process_event,; clean_player_name_etree,
     calculate_shift_stats,
     convert_time_to_seconds,
     etree,
-    fix_coordinates,
     fix_json_encoding,
-    process_event_players,
     scrape_game_data,
     validate_game_id,
     validate_roster_data,
     validate_shift_data,
 )
+
+# from nhl_scraper.scraper.tools.constants import PBP_DF_RENAME, PBP_DEFAULT_COLUMNS
 
 warnings.filterwarnings("ignore")
 
@@ -76,67 +79,15 @@ def scrapeGamePlayByPlay(game_id: Union[str, int]) -> DataFrame:
         # Create initial DataFrame
         pbp_df = pd.json_normalize(data["plays"])
 
+        rosters_df = scrapeGameRosters(game_id)
+
+        # Process play by play data
+        pbp_df = process_play_by_play(data, game_id, rosters_df)
+
         # Add game ID and metadata
         pbp_df["gameId"] = game_id
         pbp_df["meta_datetime"] = pd.to_datetime("now")
         pbp_df["meta_source"] = "NHL API"
-
-        # Get rosters for player mapping
-        rosters_df = scrapeGameRosters(game_id)
-        rosters_df["fullName"] = (
-            rosters_df["firstName.default"] + " " + rosters_df["lastName.default"]
-        )
-        rosters_dict = dict(zip(rosters_df["playerId"], rosters_df["fullName"]))
-
-        # Process events and players
-        pbp_df = process_event_players(pbp_df, rosters_dict)
-
-        # Fill in score information
-        score_columns = [
-            "details.awaySOG",
-            "details.homeSOG",
-            "details.awayScore",
-            "details.homeScore",
-        ]
-        for col in score_columns:
-            pbp_df[col] = pbp_df[col].ffill().fillna(0)
-
-        # Clean up column names
-        pbp_df = pbp_df.rename(
-            columns={
-                "typeDescKey": "event",
-                "periodDescriptor.number": "periodNumber",
-                "periodDescriptor.periodType": "periodType",
-                "details.eventOwnerTeamId": "teamId",
-                # ... add other column renames as needed
-            }
-        )
-
-        # Process coordinates
-        pbp_df = fix_coordinates(pbp_df)
-
-        # Add team information
-        pbp_df["homeTeam"] = data["homeTeam"]["abbrev"]
-        pbp_df["awayTeam"] = data["awayTeam"]["abbrev"]
-        pbp_df["homeTeamId"] = data["homeTeam"]["id"]
-        pbp_df["awayTeamId"] = data["awayTeam"]["id"]
-        pbp_df["eventTeamType"] = np.where(
-            pbp_df["eventTeam"] == pbp_df["homeTeam"], "home", "away"
-        )
-
-        # Validate essential columns
-        required_columns = [
-            "event",
-            "periodNumber",
-            "timeInPeriod",
-            "homeTeam",
-            "awayTeam",
-            "gameId",
-        ]
-        missing_columns = [col for col in required_columns if col not in pbp_df.columns]
-        if missing_columns:
-            raise ValueError(f"Missing required columns: {missing_columns}")
-
         return pbp_df
 
     except requests.RequestException as e:
@@ -147,7 +98,7 @@ def scrapeGamePlayByPlay(game_id: Union[str, int]) -> DataFrame:
         raise Exception(f"An unexpected error occurred: {str(e)}")
 
 
-@lru_cache(maxsize=1000)  # Cache up to 1000 unique gameIds
+@lru_cache(maxsize=1000)
 def scrapeGameComplete(game_id: Union[str, int]) -> Tuple[DataFrame, DataFrame, DataFrame]:
     """
     Scrapes comprehensive game data including play-by-play, rosters, and shifts.
@@ -162,248 +113,15 @@ def scrapeGameComplete(game_id: Union[str, int]) -> Tuple[DataFrame, DataFrame, 
             - Shifts DataFrame
     """
     try:
-        # Make API request
-        url = f"https://api-web.nhle.com/v1/gamecenter/{game_id}/play-by-play"
-        response = requests.get(url)
-        response.raise_for_status()
-        data = response.json()
+        # Validate game ID and get base data
+        game_id = validate_game_id(game_id)
+        data = scrape_game_data(game_id)
 
-        # Create play-by-play DataFrame
-        pbp_df = pd.json_normalize(data["plays"])
-
-        # Compare columns
-        og_cols = [
-            "eventId",
-            "timeInPeriod",
-            "timeRemaining",
-            "situationCode",
-            "homeTeamDefendingSide",
-            "typeCode",
-            "typeDescKey",
-            "sortOrder",
-            "periodDescriptor.number",
-            "periodDescriptor.periodType",
-            "periodDescriptor.maxRegulationPeriods",
-            "details.eventOwnerTeamId",
-            "details.losingPlayerId",
-            "details.winningPlayerId",
-            "details.xCoord",
-            "details.yCoord",
-            "details.zoneCode",
-            "details.hittingPlayerId",
-            "details.hitteePlayerId",
-            "details.blockingPlayerId",
-            "details.shootingPlayerId",
-            "details.reason",
-            "details.shotType",
-            "details.goalieInNetId",
-            "details.awaySOG",
-            "details.homeSOG",
-            "details.playerId",
-            "details.typeCode",
-            "details.descKey",
-            "details.duration",
-            "details.committedByPlayerId",
-            "details.drawnByPlayerId",
-            "pptReplayUrl",
-            "details.scoringPlayerId",
-            "details.scoringPlayerTotal",
-            "details.assist1PlayerId",
-            "details.assist1PlayerTotal",
-            "details.assist2PlayerId",
-            "details.assist2PlayerTotal",
-            "details.awayScore",
-            "details.homeScore",
-            "details.highlightClipSharingUrl",
-            "details.highlightClipSharingUrlFr",
-            "details.highlightClip",
-            "details.highlightClipFr",
-            "details.discreteClip",
-            "details.discreteClipFr",
-            "details.secondaryReason",
-            "details.servedByPlayerId",
-            "zoneStartSide_1",
-            "zoneStartSideDetail_1",
-        ]
-        pbp_columns = set(pbp_df.columns.tolist())
-        expected_columns = set(og_cols)
-
-        if pbp_columns != expected_columns:
-            new_columns = pbp_columns - expected_columns
-            missing_columns = expected_columns - pbp_columns
-            if new_columns:
-                print(f"New columns in the dataset: {new_columns}")
-            if missing_columns:
-                for col in missing_columns:
-                    pbp_df[col] = np.nan
-
-        # Get rosters for player mapping
+        # Get all required data
         rosters_df = scrapeGameRosters(game_id)
-        rosters_df["fullName"] = (
-            rosters_df["firstName.default"] + " " + rosters_df["lastName.default"]
-        )
-        rosters_dict = dict(zip(rosters_df["playerId"], rosters_df["fullName"]))
+        pbp_df = process_play_by_play(data, game_id, rosters_df)
 
-        # Team abbreviation mapping
-        abbrev_dict = {
-            data["awayTeam"]["id"]: data["awayTeam"]["abbrev"],
-            data["homeTeam"]["id"]: data["homeTeam"]["abbrev"],
-        }
-        pbp_df["eventTeam"] = pbp_df["details.eventOwnerTeamId"].map(abbrev_dict)
-        pbp_df["gameId"] = game_id
-        pbp_df["period"] = pd.to_numeric(pbp_df["periodDescriptor.number"])
-
-        # Test for unexpected events
-        expected_events = [
-            "period-start",
-            "faceoff",
-            "hit",
-            "blocked-shot",
-            "shot-on-goal",
-            "stoppage",
-            "giveaway",
-            "delayed-penalty",
-            "penalty",
-            "failed-shot-attempt",
-            "missed-shot",
-            "goal",
-            "takeaway",
-            "period-end",
-            "shootout-complete",
-            "game-end",
-        ]
-        actual_events = pbp_df["typeDescKey"].unique()
-        missing_events = set(actual_events) - set(expected_events)
-        if missing_events:
-            raise ValueError(f"The following events are not in the dataset: {missing_events}")
-
-        # Process events and players
-        event_columns = {
-            "faceoff": ("details.winningPlayerId", "details.losingPlayerId"),
-            "hit": ("details.hittingPlayerId", "details.hitteePlayerId"),
-            "blocked-shot": ("details.shootingPlayerId", "details.blockingPlayerId"),
-            "shot-on-goal": ("details.shootingPlayerId", None),
-            "missed-shot": ("details.shootingPlayerId", None),
-            "goal": (
-                "details.scoringPlayerId",
-                "details.assist1PlayerId",
-                "details.assist2PlayerId",
-            ),
-            "giveaway": ("details.playerId", None),
-            "takeaway": ("details.playerId", None),
-            "penalty": (
-                "details.committedByPlayerId",
-                "details.drawnByPlayerId",
-                "details.servedByPlayerId",
-            ),
-            "failed-shot-attempt": ("details.shootingPlayerId", None),
-        }
-
-        # Initialize player columns
-        pbp_df[["playerId_1", "playerId_2", "playerId_3"]] = np.nan
-        pbp_df[["playerName_1", "playerName_2", "playerName_3"]] = np.nan
-
-        # Assign player data based on event type
-        for event, columns in event_columns.items():
-            for i, col in enumerate(columns, start=1):
-                if col:
-                    pbp_df.loc[pbp_df["typeDescKey"] == event, f"playerId_{i}"] = pbp_df.loc[
-                        pbp_df["typeDescKey"] == event, col
-                    ]
-
-        # Fill in scores
-        for col in ["details.awaySOG", "details.homeSOG", "details.awayScore", "details.homeScore"]:
-            pbp_df[col] = pbp_df[col].ffill().fillna(0)
-
-        # Drop clip columns and other unnecessary columns
-        clip_columns = pbp_df.filter(like="Clip").columns.tolist()
-        columns_to_drop = [
-            "details.losingPlayerId",
-            "details.winningPlayerId",
-            "details.hittingPlayerId",
-            "details.hitteePlayerId",
-            "details.shootingPlayerId",
-            "details.blockingPlayerId",
-            "details.playerId",
-            "details.committedByPlayerId",
-            "details.drawnByPlayerId",
-            "periodDescriptor.maxRegulationPeriods",
-            "situationCode",
-            "typeCode",
-            "pptReplayUrl",
-            "details.scoringPlayerId",
-            "details.assist1PlayerId",
-            "details.assist2PlayerId",
-            "details.servedByPlayerId",
-        ] + clip_columns
-        pbp_df = pbp_df.drop(columns=columns_to_drop)
-
-        # Map player names
-        pbp_df["playerName_1"] = pbp_df["playerId_1"].map(rosters_dict)
-        pbp_df["playerName_2"] = pbp_df["playerId_2"].map(rosters_dict)
-        pbp_df["playerName_3"] = pbp_df["playerId_3"].map(rosters_dict)
-
-        # Rename columns
-        pbp_df = pbp_df.rename(
-            columns={
-                "typeDescKey": "event",
-                "periodDescriptor.number": "periodNumber",
-                "periodDescriptor.periodType": "periodType",
-                "details.eventOwnerTeamId": "teamId",
-                "details.xCoord": "xCoord",
-                "details.yCoord": "yCoord",
-                "details.zoneCode": "zoneCode",
-                "details.reason": "reason",
-                "details.shotType": "shotType",
-                "details.goalieInNetId": "goalieInNetId",
-                "details.awaySOG": "awaySOG",
-                "details.homeSOG": "homeSOG",
-                "details.typeCode": "typeCode",
-                "details.descKey": "descKey",
-                "details.duration": "duration",
-                "details.scoringPlayerTotal": "scoringPlayerTotal",
-                "details.assist1PlayerTotal": "assist1PlayerTotal",
-                "details.assist2PlayerTotal": "assist2PlayerTotal",
-                "details.awayScore": "awayScore",
-                "details.homeScore": "homeScore",
-                "details.secondaryReason": "secondaryReason",
-            }
-        )
-
-        # Calculate elapsed time
-        pbp_df["timeInPeriod_s"] = (
-            pbp_df["timeInPeriod"].str.split(":").apply(lambda x: int(x[0]) * 60 + int(x[1]))
-        )
-        pbp_df["timeRemaining_s"] = (
-            pbp_df["timeRemaining"].str.split(":").apply(lambda x: int(x[0]) * 60 + int(x[1]))
-        )
-        pbp_df["elapsedTime"] = (pbp_df["period"] - 1) * 20 * 60 + pbp_df["timeInPeriod_s"]
-
-        # Add team information
-        pbp_df["homeTeam"] = data["homeTeam"]["abbrev"]
-        pbp_df["awayTeam"] = data["awayTeam"]["abbrev"]
-        pbp_df["homeTeamId"] = data["homeTeam"]["id"]
-        pbp_df["awayTeamId"] = data["awayTeam"]["id"]
-        pbp_df["eventTeamType"] = np.where(
-            pbp_df["eventTeam"] == pbp_df["homeTeam"], "home", "away"
-        )
-
-        # Fix coordinates
-        pbp_df["xFixed"] = np.where(
-            ((pbp_df["eventTeamType"] == "home") & (pbp_df["homeTeamDefendingSide"] == "right"))
-            | ((pbp_df["eventTeamType"] == "away") & (pbp_df["homeTeamDefendingSide"] == "right")),
-            0 - pbp_df["xCoord"],
-            pbp_df["xCoord"],
-        )
-
-        pbp_df["yFixed"] = np.where(
-            ((pbp_df["eventTeamType"] == "home") & (pbp_df["homeTeamDefendingSide"] == "right"))
-            | ((pbp_df["eventTeamType"] == "away") & (pbp_df["homeTeamDefendingSide"] == "right")),
-            0 - pbp_df["yCoord"],
-            pbp_df["yCoord"],
-        )
-
-        # Get shifts data
+        # Try modern shifts API first, fallback to legacy if needed
         try:
             shifts_df = scrapeGameShifts(game_id)
         except Exception as e:
@@ -631,131 +349,149 @@ def scrapeGameShiftsLegacy(game_id: Union[str, int]) -> DataFrame:
             for side in ["H", "V"]:
                 url = url_template.format(HV=side)
 
-            # Fetch the webpage content
-            response = requests.get(url)
-            response.raise_for_status()
+                # Fetch the webpage content
+                response = requests.get(url)
+                response.raise_for_status()
 
-            # Use BeautifulSoup with lxml parser
-            soup = BeautifulSoup(response.content, "lxml")
+                # Use BeautifulSoup with lxml parser
+                soup = BeautifulSoup(response.content, "lxml")
 
-            # Convert BeautifulSoup object to lxml etree
-            tree = etree.HTML(str(soup))
+                # Convert BeautifulSoup object to lxml etree
+                tree = etree.HTML(str(soup))
 
-            # Extract player names using XPath
-            player_names = tree.xpath('.//td[@class="playerHeading + border"]/text()')
+                # Extract player names using XPath
+                player_names = tree.xpath('.//td[@class="playerHeading + border"]/text()')
 
-            # Extract shift details using XPath
-            shift_rows = tree.xpath('.//tr[@class="evenColor"] | .//tr[@class="oddColor"]')
+                # Extract shift details using XPath
+                shift_rows = tree.xpath('.//tr[@class="evenColor"] | .//tr[@class="oddColor"]')
 
-            # Store extracted data
-            shift_data = []
-            for row in shift_rows:
-                shift_number = (
-                    row.xpath("./td[1]/text()")[0].strip() if row.xpath("./td[1]/text()") else ""
+                # Store extracted data
+                shift_data = []
+                for row in shift_rows:
+                    shift_number = (
+                        row.xpath("./td[1]/text()")[0].strip()
+                        if row.xpath("./td[1]/text()")
+                        else ""
+                    )
+                    period = (
+                        row.xpath("./td[2]/text()")[0].strip()
+                        if row.xpath("./td[2]/text()")
+                        else ""
+                    )
+                    start_time = (
+                        row.xpath("./td[3]/text()")[0].strip()
+                        if row.xpath("./td[3]/text()")
+                        else ""
+                    )
+                    end_time = (
+                        row.xpath("./td[4]/text()")[0].strip()
+                        if row.xpath("./td[4]/text()")
+                        else ""
+                    )
+                    duration = (
+                        row.xpath("./td[5]/text()")[0].strip()
+                        if row.xpath("./td[5]/text()")
+                        else ""
+                    )
+                    event = (
+                        row.xpath("./td[6]/text()")[0].strip()
+                        if row.xpath("./td[6]/text()")
+                        else ""
+                    )
+
+                    shift_data.append(
+                        {
+                            "Shift Number": shift_number,
+                            "Period": period,
+                            "Start Time": start_time,
+                            "End Time": end_time,
+                            "Duration": duration,
+                            "Event": event,
+                        }
+                    )
+
+                # Output extracted data
+                shifts_df = pd.DataFrame(shift_data)
+
+                shifts_df["is_home"] = 1 if side == "H" else 0
+
+                # Replace 'OT' with 4 ### TO FIX EVENTUALLY BECAUSE OF PLAYOFFS
+                shifts_df["Period"] = shifts_df["Period"].replace("OT", 4)
+                shifts_df["Period"] = pd.to_numeric(shifts_df["Period"], errors="coerce")
+
+                shifts_df["Shift Number"] = pd.to_numeric(
+                    shifts_df["Shift Number"], errors="coerce"
                 )
-                period = (
-                    row.xpath("./td[2]/text()")[0].strip() if row.xpath("./td[2]/text()") else ""
+
+                # Assign a row with 1 where "Start Time" has a / in it and filter out 0s
+                shifts_df["dummy"] = np.where(shifts_df["Start Time"].str.contains("/"), 1, 0)
+                shifts_df = shifts_df[shifts_df["dummy"] == 1]
+                shifts_df = shifts_df.drop(columns=["dummy"])
+
+                # Assign player names
+                shifts_df["Player Name"] = None
+                player_index = 0
+
+                shifts_df["Shift Number"] = pd.to_numeric(
+                    shifts_df["Shift Number"], errors="coerce"
                 )
-                start_time = (
-                    row.xpath("./td[3]/text()")[0].strip() if row.xpath("./td[3]/text()") else ""
-                )
-                end_time = (
-                    row.xpath("./td[4]/text()")[0].strip() if row.xpath("./td[4]/text()") else ""
-                )
-                duration = (
-                    row.xpath("./td[5]/text()")[0].strip() if row.xpath("./td[5]/text()") else ""
-                )
-                event = (
-                    row.xpath("./td[6]/text()")[0].strip() if row.xpath("./td[6]/text()") else ""
-                )
+                shifts_df = shifts_df.reset_index(drop=True)
+                # Iterate through shifts and assign player names
+                for i in range(len(shifts_df)):
+                    if player_index < len(player_names):
+                        shifts_df.loc[i, "Player Name"] = player_names[player_index]
 
-                shift_data.append(
-                    {
-                        "Shift Number": shift_number,
-                        "Period": period,
-                        "Start Time": start_time,
-                        "End Time": end_time,
-                        "Duration": duration,
-                        "Event": event,
-                    }
+                    # If shift number decreases, move to the next player
+                    if (
+                        i > 0
+                        and shifts_df.loc[i, "Shift Number"] < shifts_df.loc[i - 1, "Shift Number"]
+                    ):
+                        player_index += 1  # Move to the next player
+
+                # Split the "Player Name" column into "Player Number" and "Player Name"
+                shifts_df[["Player Number", "Player Name"]] = shifts_df["Player Name"].str.split(
+                    " ", n=1, expand=True
                 )
 
-            # Output extracted data
-            shifts_df = pd.DataFrame(shift_data)
+                # Convert "Player Number" to numeric for sorting or analysis
+                shifts_df["Player Number"] = pd.to_numeric(
+                    shifts_df["Player Number"], errors="coerce"
+                )
+                shifts_df["firstName"] = shifts_df["Player Name"].str.split(", ").str[1]
 
-            shifts_df["is_home"] = 1 if side == "H" else 0
+                shifts_df["lastName"] = shifts_df["Player Name"].str.split(", ").str[0]
+                # Remove number from firstName
+                shifts_df["lastName"] = shifts_df["lastName"].str.replace(r"\d+", "")
+                shifts_df["lastName"] = shifts_df["lastName"].str.strip()
 
-            # Replace 'OT' with 4 ### TO FIX EVENTUALLY BECAUSE OF PLAYOFFS
-            shifts_df["Period"] = shifts_df["Period"].replace("OT", 4)
-            shifts_df["Period"] = pd.to_numeric(shifts_df["Period"], errors="coerce")
+                shifts_df[["Start Time (Elapsed)", "Start Time (Remaining)"]] = shifts_df[
+                    "Start Time"
+                ].str.split(" ", n=1, expand=True)
+                shifts_df[["End Time (Elapsed)", "End Time (Remaining)"]] = shifts_df[
+                    "End Time"
+                ].str.split(" ", n=1, expand=True)
 
-            shifts_df["Shift Number"] = pd.to_numeric(shifts_df["Shift Number"], errors="coerce")
+                # Strip "/ " in remaining cols
+                shifts_df["Start Time (Remaining)"] = shifts_df[
+                    "Start Time (Remaining)"
+                ].str.replace("/ ", "")
+                shifts_df["End Time (Remaining)"] = shifts_df["End Time (Remaining)"].str.replace(
+                    "/ ", ""
+                )
 
-            # Assign a row with 1 where "Start Time" has a / in it and filter out 0s
-            shifts_df["dummy"] = np.where(shifts_df["Start Time"].str.contains("/"), 1, 0)
-            shifts_df = shifts_df[shifts_df["dummy"] == 1]
-            shifts_df = shifts_df.drop(columns=["dummy"])
+                shifts_df = shifts_df.drop(columns=["Start Time", "End Time"])
 
-            # Assign player names
-            shifts_df["Player Name"] = None
-            player_index = 0
+                for col in [
+                    "Start Time (Elapsed)",
+                    "Start Time (Remaining)",
+                    "End Time (Elapsed)",
+                    "End Time (Remaining)",
+                    "Duration",
+                ]:
+                    col_with_seconds = col + " (Seconds)"
+                    shifts_df[col_with_seconds] = shifts_df[col].apply(convert_time_to_seconds)
 
-            shifts_df["Shift Number"] = pd.to_numeric(shifts_df["Shift Number"], errors="coerce")
-            shifts_df = shifts_df.reset_index(drop=True)
-            # Iterate through shifts and assign player names
-            for i in range(len(shifts_df)):
-                if player_index < len(player_names):
-                    shifts_df.loc[i, "Player Name"] = player_names[player_index]
-
-                # If shift number decreases, move to the next player
-                if (
-                    i > 0
-                    and shifts_df.loc[i, "Shift Number"] < shifts_df.loc[i - 1, "Shift Number"]
-                ):
-                    player_index += 1  # Move to the next player
-
-            # Split the "Player Name" column into "Player Number" and "Player Name"
-            shifts_df[["Player Number", "Player Name"]] = shifts_df["Player Name"].str.split(
-                " ", n=1, expand=True
-            )
-
-            # Convert "Player Number" to numeric for sorting or analysis
-            shifts_df["Player Number"] = pd.to_numeric(shifts_df["Player Number"], errors="coerce")
-            shifts_df["firstName"] = shifts_df["Player Name"].str.split(", ").str[1]
-
-            shifts_df["lastName"] = shifts_df["Player Name"].str.split(", ").str[0]
-            # Remove number from firstName
-            shifts_df["lastName"] = shifts_df["lastName"].str.replace(r"\d+", "")
-            shifts_df["lastName"] = shifts_df["lastName"].str.strip()
-
-            shifts_df[["Start Time (Elapsed)", "Start Time (Remaining)"]] = shifts_df[
-                "Start Time"
-            ].str.split(" ", n=1, expand=True)
-            shifts_df[["End Time (Elapsed)", "End Time (Remaining)"]] = shifts_df[
-                "End Time"
-            ].str.split(" ", n=1, expand=True)
-
-            # Strip "/ " in remaining cols
-            shifts_df["Start Time (Remaining)"] = shifts_df["Start Time (Remaining)"].str.replace(
-                "/ ", ""
-            )
-            shifts_df["End Time (Remaining)"] = shifts_df["End Time (Remaining)"].str.replace(
-                "/ ", ""
-            )
-
-            shifts_df = shifts_df.drop(columns=["Start Time", "End Time"])
-
-            for col in [
-                "Start Time (Elapsed)",
-                "Start Time (Remaining)",
-                "End Time (Elapsed)",
-                "End Time (Remaining)",
-                "Duration",
-            ]:
-                col_with_seconds = col + " (Seconds)"
-                shifts_df[col_with_seconds] = shifts_df[col].apply(convert_time_to_seconds)
-
-            team_shifts_dfs.append(shifts_df)
+                team_shifts_dfs.append(shifts_df)
 
         except requests.RequestException as e:
             raise requests.HTTPError(f"Failed to fetch HTML shift report: {str(e)}")
@@ -796,62 +532,226 @@ def scrapeGameShiftsLegacy(game_id: Union[str, int]) -> DataFrame:
         raise Exception(f"An unexpected error occurred: {str(e)}")
 
 
-def clean_player_name_etree(element: _Element) -> str:
+def hs_strip_html(td):
     """
-    Extract player number and name from HTML element.
+    Function from Harry Shomer's Github
 
-    Use this method for historical games where the API data is unavailable.
+    Strip html tags and such
 
-    Args:
-        element: etree element containing player information
+    :param td: pbp
 
-    Returns:
-        Tuple of (player number, player name)
+    :return: list of plays (which contain a list of info) stripped of html
     """
-    # Safely get text content, handling None case
-    text = "".join(str(item) for item in element.itertext()).strip() if element is not None else ""
-    if not text:
-        return None, ""
+    for y in range(len(td)):
+        # Get the 'br' tag for the time column...this get's us time remaining instead
+        # of elapsed and remaining combined
+        if y == 3:
+            td[y] = td[y].get_text()  # This gets us elapsed and remaining combined-< 3:0017:00
+            index = td[y].find(":")
+            td[y] = td[y][: index + 3]
+        elif (y == 6 or y == 7) and td[0] != "#":
+            # 6 & 7-> These are the player 1 ice one's
+            # The second statement controls for when it's just a header
+            baz = td[y].find_all("td")
+            bar = [
+                baz[z] for z in range(len(baz)) if z % 4 != 0
+            ]  # Because of previous step we get repeats...delete some
 
-    number_match = re.search(r"(\d+)\s", text)
-    number = int(number_match.group(1)) if number_match else None
-    name = re.sub(r"^\d+\s*", "", text).strip()
-    return number, name
+            # The setup in the list is now: Name/Number->Position->Blank...and repeat
+            # Now strip all the html
+            players = []
+            for i in range(len(bar)):
+                if i % 3 == 0:
+                    try:
+                        # name = return_name_html(bar[i].find("font")["title"])
+                        name = bar[i].get_text().strip("\n")
+                        number = (
+                            bar[i].get_text().strip("\n")
+                        )  # Get number and strip leading/trailing newlines
+                    except KeyError:
+                        name = ""
+                        number = ""
+                elif i % 3 == 1:
+                    if name != "":
+                        position = bar[i].get_text()
+                        players._append([name, number, position])
+
+            td[y] = players
+        else:
+            td[y] = td[y].get_text()
+
+    return td
 
 
-def process_event(event: _Element) -> EventDict:
-    """
-    Process an event element from the play-by-play data.
+def scrape_html_events(season, game_id):
+    # global game
+    url = "http://www.nhl.com/scores/htmlreports/" + season + "/PL0" + game_id + ".HTM"
+    page = requests.get(url)
+    # if int(season)<20092010:
+    #   soup = BeautifulSoup(page.content, 'html.parser')
+    # else:
+    #   soup = BeautifulSoup(page.content, 'lxml')
+    soup = BeautifulSoup(page.content.decode("ISO-8859-1"), "lxml")
+    tds = soup.find_all("td", {"class": re.compile(".*bborder.*")})
+    # global stripped_html
+    # global eventdf
+    stripped_html = hs_strip_html(tds)
+    length = int(len(stripped_html) / 8)
+    eventdf = pd.DataFrame(np.array(stripped_html).reshape(length, 8)).rename(
+        columns={
+            0: "index",
+            1: "period",
+            2: "strength",
+            3: "time",
+            4: "event",
+            5: "description",
+            6: "away_skaters",
+            7: "home_skaters",
+        }
+    )
+    split = eventdf.time.str.split(":")
+    # game_date = soup.find_all(
+    #     "td", {"align": "center", "style": "font-size: 10px;font-weight:bold"}
+    # )[2].get_text()
 
-    Args:
-        event: An lxml Element representing a game event
+    potentialnames = soup.find_all(
+        "td", {"align": "center", "style": "font-size: 10px;font-weight:bold"}
+    )
 
-    Returns:
-        Dict containing processed event information
-    """
-    if not isinstance(event, _Element):
-        return {}
+    for i in range(0, 999):
+        away = potentialnames[i].get_text()
+        if ("Away Game") in away or ("tr./Away") in away:
+            away = re.split("Match|Game", away)[0]
+            break
 
-    try:
-        result: EventDict = {}
-        players: XPathResult = event.xpath(".//player")
-        if not isinstance(players, list):
-            return {}
+    for i in range(0, 999):
+        home = potentialnames[i].get_text()
+        if ("Home Game") in home or ("Dom./Home") in home:
+            home = re.split("Match|Game", home)[0]
+            break
 
-        # Process players
-        for player in players:
-            if isinstance(player, _Element):
-                name = player.get("name", "")
-                if name:
-                    result.setdefault("players", []).append(name)
+    game = eventdf.assign(
+        away_skaters=eventdf.away_skaters.str.replace("\n", ""),
+        home_skaters=eventdf.home_skaters.str.replace("\n", ""),
+        original_time=eventdf.time,
+        time=split.str[0] + ":" + split.str[1].str[:2],
+        home_team=home,
+        away_team=away,
+    )
 
-        # Get event result
-        event_result = event.xpath("result")
-        if isinstance(event_result, list) and event_result:
-            first_result = event_result[0]
-            if isinstance(first_result, _Element):
-                result["result"] = first_result.text or ""
+    game = game.assign(
+        away_team_abbreviated=game.away_skaters[0].split(" ")[0],
+        home_team_abbreviated=game.home_skaters[0].split(" ")[0],
+    )
 
-        return result
-    except (AttributeError, IndexError):
-        return {}
+    game = game[game.period != "Per"]
+
+    game = game.assign(index=game.index.astype(int)).rename(columns={"index": "event_index"})
+
+    game = game.assign(event_team=game.description.str.split(" ").str[0])
+
+    game = game.assign(event_team=game.event_team.str.split("\xa0").str[0])
+
+    game = game.assign(
+        event_team=np.where(
+            ~game.event_team.isin(
+                [game.home_team_abbreviated.iloc[0], game.away_team_abbreviated.iloc[0]]
+            ),
+            "\xa0",
+            game.event_team,
+        )
+    )
+
+    game = game.assign(
+        other_team=np.where(
+            game.event_team == "",
+            "\xa0",
+            np.where(
+                game.event_team == game.home_team_abbreviated.iloc[0],
+                game.away_team_abbreviated.iloc[0],
+                game.home_team_abbreviated.iloc[0],
+            ),
+        )
+    )
+
+    game["event_player_str"] = (
+        game.description
+        # .apply(lambda x: re.findall("(#)(\d\d)|(#)(\d)|(-) (\d\d)|(-) (\d)", x))
+        .astype(str)
+        .str.replace("#", "")
+        .str.replace("-", "")
+        .str.replace("'", "")
+        .str.replace(",", "")
+        .str.replace("(", "")
+        .str.replace(")", "")
+        .astype(str)
+        .str.replace("[", "")
+        .str.replace("]", "")
+        .apply(lambda x: re.sub(" +", " ", x))
+        .str.strip()
+    )
+
+    game = game.assign(
+        event_player_1=game.event_player_str.str.split(" ").str[0],
+        event_player_2=game.event_player_str.str.split(" ").str[1],
+        event_player_3=game.event_player_str.str.split(" ").str[2],
+    )
+
+    if len(game[game.description.str.contains("Drawn By")]) > 0:
+
+        game = game.assign(
+            event_player_2=np.where(
+                game.description.str.contains("Drawn By"),
+                game.description.str.split("Drawn By")
+                .str[1]
+                .str.split("#")
+                .str[1]
+                .str.split(" ")
+                .str[0]
+                .str.strip(),
+                game.event_player_2,
+            ),
+            event_player_3=np.where(
+                game.description.str.contains("Served By"), "\xa0", game.event_player_3
+            ),
+        )
+
+    game = game.assign(
+        event_player_1=np.where(
+            (~pd.isna(game.event_player_1)) & (game.event_player_1 != ""),
+            np.where(game.event == "FAC", game.away_team_abbreviated, game.event_team)
+            + (game.event_player_1.astype(str)),
+            game.event_player_1,
+        ),
+        event_player_2=np.where(
+            (~pd.isna(game.event_player_2)) & (game.event_player_2 != ""),
+            np.where(
+                game.event == "FAC",
+                game.home_team_abbreviated,
+                np.where(
+                    game.event.isin(["BLOCK", "HIT", "PENL"]), game.other_team, game.event_team
+                ),
+            )
+            + (game.event_player_2.astype(str)),
+            game.event_player_2,
+        ),
+        event_player_3=np.where(
+            (~pd.isna(game.event_player_3)) & (game.event_player_3 != ""),
+            game.event_team + (game.event_player_3.astype(str)),
+            game.event_player_3,
+        ),
+    )
+
+    # game = game.assign(
+    #     event_player_1=np.where(
+    #         (game.event == "FAC") & (game.event_team == game.home_team_abbreviated),
+    #         game.event_player_2,
+    #         game.event_player_1,
+    #     ),
+    #     event_player_2=np.where(
+    #         (game.event == "FAC") & (game.event_team == game.home_team_abbreviated),
+    #         game.event_player_1,
+    #         game.event_player_2,
+    #     ),
+    # )
+    return game

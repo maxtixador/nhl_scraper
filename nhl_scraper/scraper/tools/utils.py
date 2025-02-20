@@ -28,6 +28,9 @@ import pandas as pd
 import requests
 from ftfy import fix_text
 from lxml import etree
+from lxml.etree import XPathResult, _Element
+
+from nhl_scraper.scraper.tools.types import EventDict  # and XPathResult
 
 warnings.filterwarnings("ignore")
 
@@ -541,7 +544,7 @@ def process_event_players(df: pd.DataFrame, roster_dict: Dict) -> pd.DataFrame:
                 ]
 
     # Map player names
-    for i in range(1, 4):
+    for i in range(1, 5):
         df[f"playerName_{i}"] = df[f"playerId_{i}"].map(roster_dict)
 
     return df
@@ -559,6 +562,7 @@ def fix_coordinates(df: pd.DataFrame) -> pd.DataFrame:
     Returns:
         DataFrame with fixed coordinates
     """
+    df["eventTeamType"] = np.where(df["eventTeam"] == df["homeTeam"], "home", "away")
     df["xFixed"] = np.where(
         ((df["eventTeamType"] == "home") & (df["homeTeamDefendingSide"] == "right"))
         | ((df["eventTeamType"] == "away") & (df["homeTeamDefendingSide"] == "right")),
@@ -574,3 +578,65 @@ def fix_coordinates(df: pd.DataFrame) -> pd.DataFrame:
     )
 
     return df
+
+
+def process_event(event: _Element) -> EventDict:
+    """
+    Process an event element from the play-by-play data.
+
+    Args:
+        event: An lxml Element representing a game event
+
+    Returns:
+        Dict containing processed event information
+    """
+    if not isinstance(event, _Element):
+        return {}
+
+    try:
+        result: EventDict = {}
+        players: XPathResult = event.xpath(".//player")
+        if not isinstance(players, list):
+            return {}
+
+        # Process players
+        for player in players:
+            if isinstance(player, _Element):
+                name = player.get("name", "")
+                if name:
+                    result.setdefault("players", []).append(name)
+
+        # Get event result
+        event_result = event.xpath("result")
+        if isinstance(event_result, list) and event_result:
+            first_result = event_result[0]
+            if isinstance(first_result, _Element):
+                result["result"] = first_result.text or ""
+
+        return result
+    except (AttributeError, IndexError):
+        return {}
+
+
+# def clean_player_name_etree(element: _Element) -> str:
+#     """
+#     Extract player number and name from HTML element.
+
+#     Use this method for historical games where the API data is unavailable.
+
+#     Args:
+#         element: etree element containing player information
+
+#     Returns:
+#         Tuple of (player number, player name)
+#     """
+#     # Safely get text content, handling None case
+#     text = "".join(str(item) for item in element.itertext()).strip()\
+#                       if element is not None else ""
+#     if not text:
+#         return None, ""
+
+#     number_match = re.search(r"(\d+)\s", text)
+#     number = int(number_match.group(1)) if number_match else None
+#     name = re.sub(r"^\d+\s*", "", text).strip()
+#     return number, name
