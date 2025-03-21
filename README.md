@@ -1,107 +1,170 @@
 # 🏒 NHL Scraper
 
-A Python package for scraping NHL data from both the current NHL API and NHL Records API. This package provides easy access to various NHL statistics and information through multiple NHL data endpoints.
+Welcome to **NHL Scraper** – an asynchronous, high-performance toolkit for scraping NHL data, built by a hockey fan for hockey fans! 🚨
 
-## Features
+This Python-based project uses modern libraries like `Playwright`, `Polars`, and `aiohttp` to collect a variety of NHL data including team stats, schedules, rosters, TOI (Time on Ice), play-by-play (PBP), draft picks, and rankings.
 
-- Draft data (current and historical)
-- Player statistics and rankings
-- Team information and rosters
-- Game data (play-by-play, shifts, rosters)
-- League standings
-- Player profiles and game logs
+---
 
-## Installation
+## 📦 Features
+
+- ✅ Active NHL teams
+- 📅 Game schedules (by team and season)
+- 📊 Standings snapshot
+- 👥 Team rosters (positions, birthplace, etc.)
+- 🧤 Goalie & skater stats
+- 🕰️ TOI reports from official HTML
+- 🎯 Play-by-play event parsing (API + HTML merged)
+- 🧑‍🎓 Draft data (all rounds & years)
+- 📋 Draft rankings by category
+
+---
+
+## ⚙️ Installation
+
+> ⚠️ Python 3.8+ is required
+
+Clone the repo and install dependencies:
 
 ```bash
-pip install git+https://github.com/maxtixador/nhl_scraper.git
+git clone https://github.com/yourusername/nhl-scraper.git
+cd nhl-scraper
+pip install playwright polars aiohttp nest_asyncio selectolax 
 ```
+Install Playwright and required browser:
+```bash
+playwright install chromium
+```
+---
+## 📘 Functionality Overview
 
-## Usage
-
+### ✅ Teams
 ```python
-from nhl_scraper.scraper import (
-    draft,
-    game,
-    player,
-    teams,
-    standings
-)
-
-# Get draft data
-draft_data = draft.scrapeDraft(year=2023)  # Current NHL API
-legacy_draft = draft.scrapeDraftLegacy(2023)  # NHL Records API
-rankings = draft.scrapeRankings(year=2025, category=1)  # Draft rankings
-
-# Get game data
-pbp = game.scrapeGamePlayByPlay(2024020858)
-shifts = game.scrapeGameShifts(2024020858)
-shifts_legacy = game.scrapeGameShiftsLegacy(2024020858)
-rosters = game.scrapeGameRosters(2024020858)
-
-# Get player data
-profile = player.scrapePlayerProfile(8478402)
-stats = player.scrapePlayerStats(8478402, stats_type="seasonTotals")
-gamelog = player.scrapePlayerGameLog(8478402, "20232024")
-
-# Get team data
-teams_list = teams.scrapeTeams()
-team_roster = teams.scrapeTeamRoster("MTL", "20232024")
-team_stats = teams.scrapeTeamStats("MTL", "20232024")
-team_schedule = teams.scrapeSchedule("MTL", "20232024")
-
-# Get standings
-standings = standings.scrapeLeagueStandings("2024-02-20")
+await scraper.scrape_teams()
 ```
 
-## Available Functions
+### 📅 Schedule
+```python
+await scraper.scrape_schedule(teams=["MTL"], seasons=["20232024"])
+```
 
-### Draft Data
-- `scrapeDraft(year=2023, round="all")`: Current season draft data
-- `scrapeDraftLegacy(draft_year=2023)`: Historical draft data
-- `scrapeRankings(year=2025, category=1)`: NHL Central Scouting rankings
+### 👥 Rosters
+```python
+await scraper.scrape_team_rosters(teams=["MTL"], seasons=["20232024"])
+```
 
-### Game Data
-- `scrapeGamePlayByPlay(game_id)`: Detailed play-by-play events
-- `scrapeGameRosters(game_id)`: Complete game rosters
-- `scrapeGameShifts(game_id)`: Player shift data (current API)
-- `scrapeGameShiftsLegacy(game_id)`: Player shift data (HTML reports)
+### 📊 Stats
+```python
+await scraper.scrape_team_stats(
+    teams=["MTL"],
+    seasons=["20232024"],
+    sessions=["regular"],
+    goalies=False
+)
+```
 
-### Player Data
-- `scrapePlayerProfile(player_id)`: Basic player information
-- `scrapePlayerStats(player_id, season, stats_type)`: Player statistics
-- `scrapePlayerGameLog(player_id, season, session_type)`: Game-by-game stats
+### 🕰️ Time On Ice
+```python
+await scraper.scrape_toi(game_ids=["2023020012"])
+```
 
-### Team Data
-- `scrapeTeams()`: Basic team information
-- `scrapeTeamDetails()`: Detailed franchise information
-- `scrapeTeamRoster(team, season)`: Team roster data
-- `scrapeTeamStats(team, season, session, goalies)`: Team statistics
-- `scrapeSchedule(team, season)`: Team schedule
-- `scrapeTeamDraftHistory(franchiseId)`: Historical draft picks
+### 🎯 Play-by-Play
+```python
+await scraper.scrape_pbp(game_ids=["2023020012"])
+```
 
-### League Data
-- `scrapeLeagueStandings(date)`: League standings for specific date
+### 🧑‍🎓 Draft Picks
+```python
+await scraper.scrape_draft(years=[2022, 2023], round_="all")
+```
 
-## Development
+### 📋 Draft Rankings
+```python
+await scraper.scrape_rankings(years=[2023], categories=[1, 2, 3, 4])
+```
 
-### Contributing
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+---
+## 🧪 Quick Start
+```python
+import asyncio
+from nhl_scraper.scraper import Scraper
+from datetime import datetime
 
-## License
+async def main():
+    scraper = Scraper()
+    standings = await scraper.scrape_standings(date=datetime.now().strftime("%Y-%m-%d"))  # for today's date
+    print(standings)
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+if __name__ == "__main__":
+    asyncio.run(main())
+````
 
-## Acknowledgments
+### 📙Notebook Example
+```python
+import asyncio
+from scraper import Scraper
 
-- NHL API and NHL Records API for providing the data
-- Contributors and maintainers
-- NHL Stats community
+async def main():
+    scraper = Scraper()
+    standings = await scraper.scrape_standings(date=datetime.now().strftime("%Y-%m-%d"))  # for today's date
+    print(standings)
 
-## Disclaimer
+standings_df = await scraper.scrape_standings(date=datetime.now().strftime("%Y-%m-%d"))
+print(standings_df)
+````
+## 📁 Project Structure
+```bash
+nhl_scraper/
+│
+├── scraper.py                # Main scraping classes
+├── README.md                 # This file
+├── requirements.txt          # Dependencies
+├── data/                     # (Optional) Saved output
+└── notebooks/                # (Optional) Jupyter usage examples
+```
 
-This package is not affiliated with or endorsed by the National Hockey League (NHL). All NHL logos and marks are the property of the NHL and its teams.
+---
+## 🤝 Contributing
+
+Pull requests are welcome! For major changes, please open an issue first to discuss what you would like to change.
+
+---
+## 📝 License
+
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+
+---
+## 📚 References
+
+- [NHL API](https://gitlab.com/dword4/nhlapi)
+- [Polars](https://pola.rs/)
+- [Playwright](https://playwright.dev/)
+- [Selectolax](https://github.com/rushter/selectolax)
+
+---
+## 📝 Acknowledgements
+
+- Patrick Bacon ([@TopDownHockey](https://x.com/TopDownHockey)) - Inspiration for the project
+- Mikael Nahabedian ([@hunterofstats](https://x.com/hunterofstats)) - For teaching me how to code in Python
+- Matthew Barlowe (I think he wants to stay anonymous) - Doesn't know it but he inspired me to create this project
+- Chace McCallum & Josh Khalfin - For being my friends and for putting up with my bullshit
+- François Kik ([@francois_kik](https://x.com/francois_kik)) - For being a good friend and for putting up with my bullshit
+- Sorry if I forgot anyone, just ask me and I'll add you to the list
+
+
+## Next Steps
+
+- Add more functionality to the scraper
+- Add more tests
+- Add more documentation
+- Add more examples
+- Add more leagues
+- Add aggregate functions
+- Add Pandas DataFrame output option
+
+
+
+## 📝 Contributors
+
+- 🤓 [Max](https://github.com/maxtixador) | [Follow me on X](https://x.com/woumaxx) | [Follow me on LinkedIn](https://www.linkedin.com/in/max-tixador/)
+
