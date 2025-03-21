@@ -27,7 +27,7 @@ This Python-based project uses modern libraries like `Playwright`, `Polars`, and
 Clone the repo and install dependencies:
 
 ```bash
-git clone https://github.com/yourusername/nhl-scraper.git
+git clone https://github.com/maxtixador/nhl_scraper
 cd nhl-scraper
 pip install playwright polars aiohttp nest_asyncio selectolax 
 ```
