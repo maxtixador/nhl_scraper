@@ -1551,10 +1551,10 @@ class Scraper:
         """Scrape team data."""
         if progress:
             with tqdm(total=1, desc="Scraping NHL Teams") as pbar:
-                df = await self.team_scraper.scrape_teams(source)
+                df = await self.team_scraper.scrape_teams(source, progress)
                 pbar.update(1)
         else:
-            df = await self.team_scraper.scrape_teams(self.source)
+            df = await self.team_scraper.scrape_teams(source, progress)
         return df
 
     async def scrape_standings(self, date=None, progress=True):
