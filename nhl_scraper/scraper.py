@@ -1409,6 +1409,12 @@ class NHLPlayByPlayParser:
             "details_homeScore": "homeScore",
             "details_goalieInNetId": "goalieInNetId",
         }
+
+        # Only rename columns that exist in the DataFrame
+        rename_dict = {k: v for k, v in rename_dict.items() if k in df.columns}
+    
+
+
         return df.rename(rename_dict)
 
 
@@ -1459,7 +1465,7 @@ class NHLPBPProcessor:
             df = self.parser.add_elapsed_time(df)
             df = self.parser.add_strength(df)
 
-            ### NEED TO WORK ON THE SEQUENCING OF THESE TASKS : DROP COLUMNS, RENAME COLUMNS, ADD META DATA ###
+            # ### NEED TO WORK ON THE SEQUENCING OF THESE TASKS : DROP COLUMNS, RENAME COLUMNS, ADD META DATA ###
             cols_to_drop = [
                 "periodDescriptor.maxRegulationPeriods",
                 "homeON",
@@ -1494,13 +1500,14 @@ class NHLPBPProcessor:
                 "details.shootingPlayerId",
             ]
             cols_to_drop = [col for col in cols_to_drop if col in df.columns]
+            df = df.drop(cols_to_drop)
             df = self.parser.rename_columns(df)
-            df = df.drop(cols_to_drop).with_columns(
+            df = (df.with_columns(
                 [
                     pl.lit(str(game_id)).alias("gameId"),
                     pl.lit(datetime.now()).alias("meta_datetime"),
                 ]
-            )
+            ))
 
             return df
 
@@ -1533,13 +1540,13 @@ class NHLPBPProcessor:
 class Scraper:
     """Main class to orchestrate scraping of various NHL data types."""
 
-    def __init__(self, team=None, season=None, date=None):
+    def __init__(self):
         """Initialize the Scraper with optional season parameter."""
-        self.season = season
-        self.team = team
+        # self.season = season
+        # self.team = team
         self.team_scraper = NHLTeamScraper()
         self.schedule_scraper = None
-        self.standings_scraper = NHLStandingsScraper(date)
+        self.standings_scraper = NHLStandingsScraper()
         self.roster_scraper = None
         self.stats_scraper = None
         self.toi_scraper = None
@@ -1602,51 +1609,51 @@ class Scraper:
         self.rankings_scraper = NHLDraftRankingsScraper(years, categories)
         return await self.rankings_scraper.scrape_rankings(progress=progress)
 
-    async def scrape_all(
-        self,
-        teams=None,
-        seasons=None,
-        sessions=None,
-        game_ids=None,
-        date_range=None,
-        standings_date=None,
-        years=None,
-        categories=None,
-        round_="all",
-        goalies=False,
-        progress=True,
-    ):
-        """Scrape all specified NHL data types concurrently."""
-        tasks = [
-            ("teams", self.scrape_teams(progress=False)),
-            ("schedule", self.scrape_schedule(date_range, progress=False)),
-            ("standings", self.scrape_standings(standings_date, progress=False)),
-        ]
-        if teams and seasons:
-            tasks.append(("rosters", self.scrape_team_rosters(teams, seasons, progress=False)))
-        if teams and seasons and sessions:
-            tasks.append(
-                ("stats", self.scrape_team_stats(teams, seasons, sessions, goalies, progress=False))
-            )
-        if game_ids:
-            tasks.append(("toi", self.scrape_toi(game_ids, progress=False)))
-            tasks.append(("pbp", self.scrape_pbp(game_ids, progress=False)))
-        if years:
-            tasks.append(("draft", self.scrape_draft(years, round_, progress=False)))
-        if years and categories:
-            tasks.append(("rankings", self.scrape_rankings(years, categories, progress=False)))
+    # async def scrape_all(
+    #     self,
+    #     teams=None,
+    #     seasons=None,
+    #     sessions=None,
+    #     game_ids=None,
+    #     date_range=None,
+    #     standings_date=None,
+    #     years=None,
+    #     categories=None,
+    #     round_="all",
+    #     goalies=False,
+    #     progress=True,
+    # ):
+    #     """Scrape all specified NHL data types concurrently."""
+    #     tasks = [
+    #         ("teams", self.scrape_teams(progress=False)),
+    #         ("schedule", self.scrape_schedule(date_range, progress=False)),
+    #         ("standings", self.scrape_standings(standings_date, progress=False)),
+    #     ]
+    #     if teams and seasons:
+    #         tasks.append(("rosters", self.scrape_team_rosters(teams, seasons, progress=False)))
+    #     if teams and seasons and sessions:
+    #         tasks.append(
+    #             ("stats", self.scrape_team_stats(teams, seasons, sessions, goalies, progress=False))
+    #         )
+    #     if game_ids:
+    #         tasks.append(("toi", self.scrape_toi(game_ids, progress=False)))
+    #         tasks.append(("pbp", self.scrape_pbp(game_ids, progress=False)))
+    #     if years:
+    #         tasks.append(("draft", self.scrape_draft(years, round_, progress=False)))
+    #     if years and categories:
+    #         tasks.append(("rankings", self.scrape_rankings(years, categories, progress=False)))
 
-        results = {}
-        if progress:
-            with tqdm(total=len(tasks), desc="Scraping NHL Data") as pbar:
-                for task_name, task in tasks:
-                    results[task_name] = await task
-                    pbar.update(1)
-        else:
-            completed_tasks = await asyncio.gather(*[task for _, task in tasks])
-            results = dict(zip([name for name, _ in tasks], completed_tasks))
+    #     results = {}
+    #     if progress:
+    #         with tqdm(total=len(tasks), desc="Scraping NHL Data") as pbar:
+    #             for task_name, task in tasks:
+    #                 results[task_name] = await task
+    #                 pbar.update(1)
+    #     else:
+    #         completed_tasks = await asyncio.gather(*[task for _, task in tasks])
+    #         results = dict(zip([name for name, _ in tasks], completed_tasks))
 
-        return results
+    #     return results
 
 
 # Main execution
