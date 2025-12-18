@@ -77,8 +77,10 @@ EVENT_MAPPING: Dict[str, str] = {
 
 
 # XGBoost model and feature paths
-MODEL_PATH = "models/xgboost_xG_model1.json"
-FEAT_PATH  = "models/xgboost_xG_features1.pkl"
+import os
+_PKG_DIR = os.path.dirname(os.path.abspath(__file__))
+MODEL_PATH = os.path.join(_PKG_DIR, "models", "xgboost_xG_model1.json")
+FEAT_PATH  = os.path.join(_PKG_DIR, "models", "xgboost_xG_features1.pkl")
 
 # Feature lists
 BASE_NUM = [
