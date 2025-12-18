@@ -18,6 +18,6 @@ dependencies = [
 authors = [
     {name = "Max Tixador", email = "maxtixador@gmail.com"}
 ]
-license = {text = "MIT"}
+license = "MIT"
 license-files = ["LICENSE"]
 
