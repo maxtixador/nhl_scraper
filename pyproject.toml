@@ -18,6 +18,12 @@ dependencies = [
 authors = [
     {name = "Max Tixador", email = "maxtixador@gmail.com"}
 ]
-license = "MIT"
-license-files = ["LICENSE"]
+license = {text = "MIT"}
 
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["scrapernhl*"]
+exclude = ["models*"]
