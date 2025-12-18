@@ -1,4 +1,4 @@
-# NHL Scraper
+# ScraperNHL
 
 A Python package for scraping and analyzing NHL data.
 
