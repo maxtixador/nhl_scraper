@@ -1,5 +1,5 @@
 [project]
-name = "nhl-scraper"
+name = "scrapernhl"
 version = "0.1.0"
 description = "Scraper for NHL data"
 readme = "README.md"
