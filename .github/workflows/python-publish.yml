@@ -1,5 +1,4 @@
 # This workflow will upload a Python Package to PyPI when a release is created
-# Uses uv for fast, reliable Python package management and builds
 name: Upload Python Package
 
 on:
@@ -8,7 +7,7 @@ on:
 
 permissions:
   contents: read
-  id-token: write  # IMPORTANT: Must be at top level for trusted publishing
+  id-token: write  
 
 jobs:
   release-build:

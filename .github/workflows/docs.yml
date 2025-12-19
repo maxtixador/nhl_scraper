@@ -1,0 +1,28 @@
+name: Deploy Documentation
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      
+      - name: Install dependencies
+        run: |
+          uv add mkdocs mkdocs-material
+      
+      - name: Deploy to GitHub Pages
+        run: uv run mkdocs gh-deploy --force

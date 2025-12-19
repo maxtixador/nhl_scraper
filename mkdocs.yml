@@ -1,0 +1,67 @@
+site_name: ScraperNHL Documentation
+site_description: NHL data scraping package with Expected Goals model
+site_author: Max Tixador
+repo_url: https://github.com/maxtixador/scrapernhl  # This should be a string, not a list
+repo_name: maxtixador/scrapernhl
+
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - API Reference: api.md
+  - Examples:
+      - Scraping Data: examples/scraping.md
+      - Expected Goals Model: examples/expected_goals.md
+  - About: about.md
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: blue
+      accent: light blue
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - header.autohide
+
+markdown_extensions:
+  - admonition
+  - toc:
+      permalink: true
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.magiclink
+  - pymdownx.betterem
+  - pymdownx.caret
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+
+plugins:
+  - search # For local search functionality
+  - mkdocstrings  # For automatic API documentation
+  - git-revision-date  # To show the last updated date
+  - minify  # To minify the HTML output
+  - macros  # To use macros in the documentation
+  - mike:
+      alias_type: symlink
+      remote: origin
+      default_branch: main
+  
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/maxtixador/scrapernhl
+  
+  version:
+    provider: mike
+  
+        
